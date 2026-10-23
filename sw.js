@@ -1,5 +1,5 @@
 /* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = '81a89c3f8e8c-0b4289ada49d';
+const BUILD = '81a89c3f8e8c-e8c97e61676f';
 const CACHE = 'ocp-api-book-' + BUILD;
 const PRECACHE = [
   "./",
@@ -9,7 +9,7 @@ const PRECACHE = [
   "app.css?v=81a89c3f8e8c",
   "sim.css?v=81a89c3f8e8c",
   "ui-kit.js?v=81a89c3f8e8c",
-  "data/merged.js?v=30d867c05851",
+  "data/merged.js?v=d8d18de3d907",
   "data/legacy.js?v=16898af37395",
   "search.js?v=81a89c3f8e8c",
   "core.js?v=81a89c3f8e8c",
@@ -20,8 +20,8 @@ const PRECACHE = [
   "viz.js?v=81a89c3f8e8c",
   "topo.js?v=81a89c3f8e8c",
   "sim.js?v=81a89c3f8e8c",
-  "data/4.22.js?v=0b4289ada49d",
-  "data/4.22.fidx.js?v=0b4289ada49d",
+  "data/4.22.js?v=e8c97e61676f",
+  "data/4.22.fidx.js?v=e8c97e61676f",
   "fonts/plex-mono-500.woff2",
   "fonts/plex-mono-600.woff2"
 ];
