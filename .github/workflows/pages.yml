@@ -32,6 +32,7 @@ jobs:
           git diff --exit-code -- index.html sw.js || { echo '::error::?v= 토큰/sw.js 가 최신이 아닙니다. node tools/stamp.js 를 실행해 커밋하세요.'; exit 1; }
           node mcp/smoke.js
           node tools/test-build.js
+          node tools/cons-audit.js --strict
       - name: Assemble site (static files only)
         run: |
           mkdir _site
