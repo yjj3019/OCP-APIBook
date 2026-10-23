@@ -95,3 +95,5 @@
 /* 새 셸에 맞춘 헤더 */
 .sim>.d-title{font:700 24px var(--sans)!important;letter-spacing:-.02em!important;margin:0 0 4px}
 .sim>.note{margin:0 0 14px;max-width:760px}
+.sf .fdef{font-size:.75em;color:var(--muted,#667);border:1px dashed currentColor;border-radius:4px;padding:0 4px;margin-left:4px;white-space:nowrap}
+.sdefs ul{margin:.3em 0 .3em 1.2em;padding:0}.sdefs li{margin:.15em 0}

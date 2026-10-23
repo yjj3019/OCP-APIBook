@@ -338,6 +338,72 @@
     const u = [...new Set(toks)].filter(t => !/^(Valid|Values|Value|Default|If|The|This|Must|One|Or|And|Allowed|Supported|None|Defaults)$/.test(t));
     return u.length >= 2 && u.length <= 12 ? u : null;
   }
+  /* 설명 문장에서 서버 기본값 추출(보수적: 틀린 값보다 못 찾는 쪽을 택함). 반환 null | { v, cond, src } — cond: "… when X" 같은 조건부 기본값(채우지 않음) */
+  const DEF_VAGUE = /subject to change|reasonable default|may change|change over time|platform (?:is left to )?choose|chosen by the platform|platform default|depends on|implementation[- ]defined|implementation[- ]specific/i;
+  const DEF_STOP = /^(?:the|a|an|this|that|these|its|their|his|her|all|any|each|every|some|empty|nil|null|unset|none|no|not|whatever|same|current|value|values|be|being|to|use|used|using|true|false|either|one|whichever|defined|determined|set|whether|if|when|what|which|where|false|nothing|default|defaults|current|existing|other|another|zero|off|on|in|of|by|for|at|as)$/i;
+  const DEF_ABS = /\b(?:if|when)\b([^,;]{0,70}?)\b(?:not\s+(?:be\s+)?(?:specified|set|provided|present|given|defined|configured|supplied)|(?:do|does)\s+not\s+specify|(?:is|are)\s+(?:unspecified|unset|empty|omitted|nil|null|absent|missing|blank)|unspecified|unset|empty|omitted|nil|absent|missing|blank)\b\s*(?:\([^)]{0,40}\))?\s*,?\s*(?:then\s+)?(?:it\s+|this\s+(?:field\s+|value\s+)?|the\s+field\s+)?/gi;
+  const DEF_ONLY = /may only be set|only applies|only valid|only used when|ignored unless|ignored if|will be cleared|only be specified|only (?:be )?(?:set|used|allowed|applicable|honou?red|relevant) (?:when|if|for|with)/i;   // 특정 조건에서만 쓰이는 필드 → 조건부
+  const DEF_UNIT = /^\s+(?:seconds?|secs?|minutes?|mins?|hours?|days?|milliseconds?|ms|bytes?|retries|times|attempts|pods?|replicas?|percent|%|MiB|GiB|KiB)\b/i;
+  const DEF_LEAD = /\b(?:defaults?\s+(?:to|is|value\s+is)|defaulted\s+to|(?:the\s+)?default\s+(?:value\s+)?(?:is|will\s+be)|default(?:\s+value)?\s*[:=]|(?:the\s+)?default\s+behaviou?r\s+is|default\s+value\s*,)\s*/gi;
+  function defVal(rest, tt, desc, quotedOnly) {
+    const q = rest.match(/^(["'`“])(.*?)(["'`”])/);
+    let tok, tail, quoted = false;
+    if (q && q[2].length <= 80) { tok = q[2]; tail = rest.slice(q[0].length); quoted = true; }
+    else { if (quotedOnly) return null; const m = rest.match(/^[^\s,;()"'`“”]+/); if (!m) return null; tok = m[0].replace(/[.:]+$/, ''); tail = rest.slice(tok.length); if (!/^(?:-?\d[\w.\/%:-]*|[A-Za-z][\w.\/-]*|\/[\w.\/-]+)$/.test(tok)) return null; }
+    if (quoted) { tok = tok.replace(/\\([*_])/g, '$1'); if (/\\/.test(tok)) return null; }                  // 문서의 마크다운 이스케이프(\*) 만 풀고, 그 밖의 역슬래시는 원문 확인이 어려워 버림
+    if (tok === '' || tok.length > 80) return null;
+    // 값 뒤: 문장 끝/구두점/괄호 또는 정수 단위만 허용. "… when X" 류는 조건부, 그 밖의 이어지는 낱말은 거부
+    let cond = false;
+    const um = tail.match(DEF_UNIT);
+    if (um && /^(?:integer|number)$/.test(tt) && /^-?\d+$/.test(tok)) tail = tail.slice(um[0].length);
+    if (/^\s*,?\s*(?:if|when)\s+(?:(?:it|this|the\s+field|the\s+value)\s+is\s+)?(?:not\s+(?:set|specified|provided)|unset|unspecified|empty|omitted|nil)\s*(?:$|[.;,)])/i.test(tail) || /^\s+for\s+backwards?\s+compatibility\b/i.test(tail)) tail = '';   // "… if unset" 은 무조건
+    if (/^\s*[,;]?\s*(?:if|when|unless|for|on|in|except|only|depending|based|per|until|after|before|while|but|otherwise|where|provided)\b/i.test(tail)) cond = true;
+    else if (!/^(?:$|[;,)(:]|\.(?:\s|$)|\s*\(|\s+-\s|\s*—|\s+(?:and\s+)?(?:which|meaning|i\.e\.|e\.g\.)\b)/i.test(tail)) return null;
+    let v;
+    if (tt === 'boolean') { if (!/^(?:true|false)$/i.test(tok)) return null; v = tok.toLowerCase() === 'true'; }
+    else if (tt === 'integer' || tt === 'number') {
+      if (/^0[0-7]{3}$/.test(tok) && tt === 'integer') v = parseInt(tok, 8);                    // 파일 모드 0644 → 420(JSON 은 10진수)
+      else if ((tt === 'integer' ? /^-?\d{1,15}$/ : /^-?\d{1,15}(?:\.\d+)?$/).test(tok)) v = Number(tok); else return null;
+    } else if (tt === 'intorstring') v = !quoted && /^-?\d{1,15}$/.test(tok) ? Number(tok) : (/^\d+(?:\.\d+)?%$/.test(tok) || quoted) ? tok : null;   // "1" 처럼 따옴표면 문자열
+    else if (tt === 'string') {
+      if (quoted) v = tok;
+      else if (/^-?\d+$/.test(tok)) return null;                                                 // 문자열 필드에 따옴표 없는 정수는 다른 값 설명일 때가 많음
+      else if (/^-?\d|^\/./.test(tok)) v = tok;                                                 // 30s, 25%, /dev/termination-log 처럼 숫자·경로면 문자열 그대로
+      else { const en = enumOf(desc) || [], inEnum = en.includes(tok) || new RegExp('["\'`]' + tok.replace(/[.\/-]/g, '\\$&') + '["\'`]').test(desc); if (DEF_STOP.test(tok) && !inEnum) return null; if (!/[A-Z]/.test(tok) && !inEnum) return null; v = tok; }
+    } else return null;
+    if (v == null || v === '') return null;
+    return { v, cond };
+  }
+  function defaultFrom(desc, type) {
+    desc = String(desc || ''); if (!/default/i.test(desc) || DEF_VAGUE.test(desc)) return null;
+    const n = normT(type), tt = PRIM[n] || (subOf(type) === 'intorstring' ? 'intorstring' : (n === 'string' || subOf(type) === 'quantity' || subOf(type) === 'time') ? 'string' : '') || (['string', 'integer', 'number', 'boolean', 'intorstring'].includes(type) ? type : '');
+    if (!tt) return null;
+    const found = [];
+    const sents = desc.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+(?=[A-Z"'*(-])|\s\*\s|\s-\s(?=["'])/);
+    for (const s of sents) {
+      DEF_LEAD.lastIndex = 0; let m;
+      while ((m = DEF_LEAD.exec(s))) {
+        const lead = m[0], at = m.index, pre = s.slice(0, at);
+        const r = defVal(s.slice(at + lead.length), tt, desc, /behaviou?r|value\s*,/i.test(lead));   // "default behavior is" 류는 따옴표 값만
+        if (!r) continue;
+        // 앞 문맥이 조건이면(If X is enabled, … / For Y, … / Otherwise …) 조건부. "If not specified," 같은 '값이 없을 때' 는 무조건으로 봄
+        const pre2 = pre.replace(DEF_ABS, (all, mid) => /\b(?:and|or|but)\b/i.test(mid) ? all : ' ');
+        if (/\b(?:if|when|whenever|unless|for|otherwise|except|only|while|where|once|after|before)\b/i.test(pre2) || /\bdefault/i.test(pre2) || pre.split('(').length > pre.split(')').length) r.cond = true;   // 열린 괄호 안(다른 값 설명)도 조건부
+        found.push(Object.assign(r, { src: s.slice(at, at + lead.length + 40).trim() }));
+      }
+      const pm = tt === 'integer' || tt === 'number' ? s.match(/\bdefault\s+(-?\d{1,15})\s*(?=[,;)]|\.(?:\s|$)|$)/i) : null;   // "weight … between 0 and 256, default 100, that …"
+      if (pm && !found.some(f => f.v === Number(pm[1]))) found.push({ v: Number(pm[1]), cond: /\b(?:if|when|for|otherwise|unless)\b/i.test(s.slice(0, pm.index).replace(DEF_ABS, ' ')), src: pm[0] });
+      const qm = tt === 'string' || tt === 'intorstring' ? s.match(/(["'])([^"']{1,60})\1\s+is\s+the\s+default\b(?=\s*(?:[.,;)]|$))/i) : null;
+      if (qm) found.push({ v: qm[2], cond: /\b(?:if|when|for|otherwise|unless)\b/i.test(s.slice(0, qm.index)), src: qm[0] });
+      // "* edge - … (default)" 같은 목록 항목
+      const bm = tt === 'string' ? s.match(/^["']?([A-Za-z][\w-]{0,40})["']?\s+(?:-|is)\s[^*]*?\(default\)\s*\.?$/) : null;
+      if (bm && !DEF_STOP.test(bm[1])) found.push({ v: bm[1], cond: false, src: bm[0].slice(0, 40) });
+    }
+    if (!found.length) return null;
+    const vals = [...new Set(found.map(f => JSON.stringify(f.v)))];
+    if (vals.length > 1) return null;                                     // 서로 다른 값이 둘 이상이면 모호 → 버림
+    return { v: found[0].v, cond: found.some(f => f.cond) || DEF_ONLY.test(desc), src: found[0].src };
+  }
 
   /* ====================== 값 기본값 / 예시 ====================== */
   function defaultFor(kid, sch, spathOf) {
@@ -562,6 +628,24 @@
     if (sch.hasStatus && !o.status) o.status = {};
     return o;
   }
+  /* 설명에서 추정한 무조건 기본값을 사용자가 넣은 객체 바로 아래의 빠진 스칼라에만 채움(status·metadata 제외). 반환 [{ path, v }] */
+  const defMemo = new Map();
+  const kidDef = k => { if (k.kind !== 'scalar') return null; const key = k.type + '\u0000' + k.desc; if (!defMemo.has(key)) defMemo.set(key, defaultFrom(k.desc, k.type)); const r = defMemo.get(key); return r && !r.cond ? r : null; };
+  function applyDefaults(o, sch) {
+    const out = [];
+    const walk = (obj, sp, vp, depth) => {
+      if (depth > 12 || !isObj(obj)) return;
+      for (const kid of sch.children(sp)) {
+        if (!depth && ['metadata', 'status', 'apiVersion', 'kind'].includes(kid.name)) continue;
+        const v = hasOwn(obj, kid.name) ? obj[kid.name] : undefined, p = vp.concat(kid.name);
+        if (kid.kind === 'scalar') { const d = v === undefined ? kidDef(kid) : null; if (d) { obj[kid.name] = d.v; out.push({ path: pstr(p), v: d.v }); } }
+        else if (kid.kind === 'object') walk(v, kid.cpath, p, depth + 1);
+        else if (kid.kind === 'array-object' && Array.isArray(v)) v.forEach((x, i) => walk(x, kid.cpath, p.concat(i), depth + 1));
+        else if (kid.kind === 'map-object' && isObj(v)) Object.keys(v).forEach(k => walk(v[k], kid.cpath, p.concat(k), depth + 1));
+      }
+    };
+    walk(o, '', [], 0); return out;
+  }
   /* op: create|get|replace|patch|delete */
   function simulate(opt, M, a, d, sch, issues, docs) {
     // 네임스페이스: 입력창 값 > 매니페스트 metadata.namespace > default (입력창 표시값과 같은 규칙)
@@ -586,7 +670,7 @@
     const ep = (opt.op === 'create' ? rn.col : rn.one);
     const ms = ep && ep.ms.find(m => m.m === method);
     const documented = ms ? ms.r : [];
-    let status = 200, body2 = null, warnings = [], note = '';
+    let status = 200, body2 = null, warnings = [], note = '', defaults = [];
     const sc = opt.scn;
     const gr = a.group || '', resName = rn.full;
     const fail = (code, reason, msg, extra) => { status = code; body2 = statusObj(code, reason, msg, extra); };
@@ -623,7 +707,7 @@
         return true;
       };
       const ok = (obj, iss) => {
-        status = opt.op === 'create' ? 201 : 200; body2 = serverObject(obj, d, sch, ns, opt.op);
+        status = opt.op === 'create' ? 201 : 200; body2 = serverObject(obj, d, sch, ns, opt.op); defaults = applyDefaults(body2, sch);
         const unk = iss.filter(i => i.code === 'unknown'); if (unk.length && opt.fv === 'Warn') warnings = unk.map(u => `unknown field "${u.path}"`);
         if (opt.dry === 'All') note = 'dryRun=All 이므로 서버가 검증만 하고 저장하지 않습니다(응답은 저장했다면 받을 내용과 같습니다).';
       };
@@ -651,7 +735,7 @@
         }
       }
     }
-    return { req, status, body: body2, warnings, note, documented, ns, name };
+    return { req, status, body: body2, warnings, note, documented, ns, name, defaults };
   }
   /* POSIX 셸 인용: 작은따옴표로 감싸고 ' 는 '\'' 로. 값은 절대 셸이 해석하지 못하고 데이터로만 쓰임 */
   const sq = s => "'" + String(s).replace(/\0/g, '').replace(/'/g, "'\\''") + "'";
@@ -880,6 +964,7 @@
       const chk = el('input', { type: 'checkbox', class: 'sfc', 'aria-label': kid.name + ' 포함', checked: present, disabled: kid.required && !isMeta ? true : (isMeta && kid.name === 'name' ? true : false) });
       const head = el('div', { class: 'sfh' }, [chk, el('span', { class: 'sfn', text: kid.name }), el('span', { class: 'ftp', text: kid.type })]);
       if (kid.required && !(isMeta && kid.name !== 'name')) head.appendChild(el('span', { class: 'req', text: '필수' }));
+      const kd = !isMeta && kidDef(kid); if (kd) head.appendChild(el('span', { class: 'fdef', text: '기본 ' + JSON.stringify(kd.v), title: '설명 문장에서 추정한 서버 기본값(생략하면 서버가 채울 것으로 보임)' }));
       const did = kid.desc ? nid('d') : null;
       if (kid.desc) head.appendChild(el('button', { class: 'sfi', type: 'button', text: 'ⓘ', title: '설명 보기', 'aria-label': kid.name + ' 설명', 'aria-expanded': 'false', 'aria-controls': did, onclick: e => { const dd = wrap.querySelector(':scope > .sfd'); dd.hidden = !dd.hidden; e.currentTarget.setAttribute('aria-expanded', String(!dd.hidden)); } }));
       wrap.appendChild(head);
@@ -1040,9 +1125,9 @@
         res.innerHTML = `<h4 class="rh">요청</h4><pre class="simreq"><code>${esc(r.req.method + ' ' + r.req.path + '\n' + r.req.headers.join('\n') + (r.req.body ? '\n\n' + JSON.stringify(r.req.body, null, 2) : ''))}</code></pre>
           <h4 class="rh">예상 응답</h4><div class="statusline ${cls}"><b>${r.status}</b> ${esc(({ 200: 'OK', 201: 'Created', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 409: 'Conflict', 422: 'Unprocessable Entity' })[r.status] || '')}</div>
           ${r.warnings.length ? `<div class="warnhdr">Warning: ${r.warnings.map(esc).join('; ')}</div>` : ''}${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}
-          <pre class="simreq"><code>${esc(JSON.stringify(r.body, null, 2))}</code></pre>${doc}
+          <pre class="simreq"><code>${esc(JSON.stringify(r.body, null, 2))}</code></pre>${r.defaults && r.defaults.length ? `<div class="sdefs"><h4 class="rh">서버가 채운 기본값(문서 기준 추정)</h4><ul>${r.defaults.map(x => `<li><code>${esc(x.path)}</code> = <code>${esc(JSON.stringify(x.v))}</code></li>`).join('')}</ul><p class="note">필드 설명 문장("Defaults to …")에서 추정한 값입니다. 실제 apiserver 기본값 처리·어드미션·웹훅·컨트롤러 동작과 다를 수 있습니다.</p></div>` : ''}${doc}
           <details class="epd"><summary>curl / oc 로 보내기</summary><div class="in"><pre class="simreq"><code>${esc('TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n\n' + curl(r.req) + '\n\n# oc 로는\n' + ocCmd(o, d, r.ns, r.name, r.req.body))}</code></pre></div></details>
-          <p class="note">이 응답은 문서의 스키마 규칙으로 계산한 <b>가상 응답</b>입니다. 실제 클러스터의 기본값·어드미션·RBAC·충돌 검사는 반영하지 않습니다.</p>`;
+          <p class="note">이 응답은 문서의 스키마 규칙으로 계산한 <b>가상 응답</b>입니다. 기본값은 설명 문장에서 추정한 것만 채우며, 실제 클러스터의 어드미션·웹훅·RBAC·충돌 검사는 반영하지 않습니다.</p>`;
       }
       drawResult();
     }
@@ -1077,6 +1162,6 @@
 
   /* 공개 API: mount, yamlParse, yamlDump, validate, makeSchema, simulate (opsOf 는 보조).
      _t 는 Node 테스트 전용 내부 함수 모음이며 공개 API 가 아니다 — 언제든 바뀌거나 사라질 수 있으니 화면 코드에서 쓰지 말 것. */
-  root.Sim = { mount, yamlParse, yamlDump, validate, makeSchema, simulate, opsOf, _t: { ensureRequired, sampleFill, setAt, getAt, delAt, hasAt, mergePatch, resNames, curl, ocCmd, sq, defaultFor, ordered, restoreStore, closeTab, cleanOpt, normT, jsonPatch, parseValue, nameError, serverObject } };
+  root.Sim = { mount, yamlParse, yamlDump, validate, makeSchema, simulate, opsOf, _t: { ensureRequired, sampleFill, setAt, getAt, delAt, hasAt, mergePatch, resNames, curl, ocCmd, sq, defaultFor, ordered, restoreStore, closeTab, cleanOpt, normT, jsonPatch, parseValue, nameError, serverObject, defaultFrom, applyDefaults } };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Sim;
 })(typeof window !== 'undefined' ? window : globalThis);

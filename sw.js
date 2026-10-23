@@ -1,22 +1,22 @@
 /* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = 'ccc3fd6d1082-bf054264b8da';
+const BUILD = 'be5eb170225e-bf054264b8da';
 const CACHE = 'api-book-' + BUILD;
 const PRECACHE = [
   "./",
-  "app.css?v=ccc3fd6d1082",
-  "sim.css?v=ccc3fd6d1082",
-  "ui-kit.js?v=ccc3fd6d1082",
+  "app.css?v=be5eb170225e",
+  "sim.css?v=be5eb170225e",
+  "ui-kit.js?v=be5eb170225e",
   "data/merged.js?v=ea32cca761d5",
   "data/legacy.js?v=16898af37395",
-  "search.js?v=ccc3fd6d1082",
-  "core.js?v=ccc3fd6d1082",
-  "views.js?v=ccc3fd6d1082",
-  "palette.js?v=ccc3fd6d1082",
-  "boot.js?v=ccc3fd6d1082",
-  "graph.js?v=ccc3fd6d1082",
-  "viz.js?v=ccc3fd6d1082",
-  "topo.js?v=ccc3fd6d1082",
-  "sim.js?v=ccc3fd6d1082",
+  "search.js?v=be5eb170225e",
+  "core.js?v=be5eb170225e",
+  "views.js?v=be5eb170225e",
+  "palette.js?v=be5eb170225e",
+  "boot.js?v=be5eb170225e",
+  "graph.js?v=be5eb170225e",
+  "viz.js?v=be5eb170225e",
+  "topo.js?v=be5eb170225e",
+  "sim.js?v=be5eb170225e",
   "data/4.22.js?v=bf054264b8da",
   "data/4.22.fidx.js?v=bf054264b8da"
 ];
