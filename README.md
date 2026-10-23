@@ -15,6 +15,10 @@ node serve.js 9000 --host 0.0.0.0   # 같은 네트워크의 다른 기기에서
 
 서버는 brotli/gzip 압축과 ETag 재검증(304)을 지원합니다. 첫 화면 전송량은 압축 없이 약 2.2MB, 압축하면 약 0.19MB입니다.
 
+## GitHub Pages 배포
+
+`main` 에 push 하면 `.github/workflows/pages.yml` 이 정적 파일만 골라 배포합니다. 처음 한 번 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 지정하세요. 주소는 `https://<계정>.github.io/OCP-APIBook/` 입니다. 하위 경로(`/OCP-APIBook/`)에서 서비스 워커·글꼴·데이터가 정상 동작함을 확인했습니다.
+
 ## 기능
 
 - **통합 검색**: 같은 API는 버전과 관계없이 한 번만 나오고, 제공 버전과 **제약·제한 사항**이 함께 표시됩니다. 한글·영문·약어(`mcp`, `pvc`)·오타·`apiVersion`·중첩 필드 경로(`spec.tls.termination`)·제약 문장(`deprecated`, `immutable`)까지 찾습니다. 분류, 범위, 안정성(GA/Beta/Alpha), 제약 유무로 거를 수 있습니다.

@@ -49,7 +49,7 @@ self.addEventListener('fetch', e => {
   }
   // 코드·데이터는 ?v= 해시가 URL 에 들어 있어 내용이 바뀌면 URL 도 바뀐다 → 캐시 우선
   e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(res => {
-    if (res.ok && (u.search.includes('v=') || u.pathname.startsWith('/fonts/'))) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
+    if (res.ok && (u.search.includes('v=') || u.pathname.includes('/fonts/'))) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
     return res;
   })));
 });
