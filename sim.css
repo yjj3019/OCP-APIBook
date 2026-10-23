@@ -43,7 +43,7 @@
 .simout pre{border-radius:10px}
 .bdg{display:inline-block;min-width:18px;text-align:center;font:700 11px var(--mono);border-radius:9px;padding:0 5px;color:#fff}
 .bdg.bad{background:var(--bad)}.bdg.warn{background:var(--warn)}.bdg.ok{background:var(--ok)}
-.vbad{font-size:13px;font-weight:500}.vbad.ok{color:var(--ok)}.vbad.bad{color:var(--bad)}
+.vbad{font-size:13px;font-weight:500}.vbad.ok{color:var(--ok)}.vbad.bad{color:var(--bad)}.vbad.warn{color:var(--warn)}
 .issues{display:flex;flex-direction:column;gap:5px}
 .iss{display:block;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 10px;font-size:13px}
 .iss:hover{border-color:var(--sub)}
@@ -58,6 +58,35 @@
 .warnhdr{font:12.5px var(--mono);color:var(--warn);margin:0 0 6px;word-break:break-word}
 .resp.hit{font-weight:700;color:var(--ink)}
 @media(max-width:900px){.simgrid{grid-template-columns:minmax(0,1fr)}.simout{position:static;max-height:none}}
+
+/* 배지/라벨 글자색: 밝은 배경(다크 모드의 --bad/--warn/--ok)에서는 어두운 글자 */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .bdg,:root:not([data-theme="light"]) .iss .lv{color:#1a1110}}
+:root[data-theme="dark"] .bdg,:root[data-theme="dark"] .iss .lv{color:#1a1110}
+
+/* 터치 화면: 체크박스·정보 버튼·닫기 버튼의 클릭 영역 확대 */
+@media (pointer:coarse){
+  .sfc{width:24px;height:24px;margin:4px}
+  .sfi{min-width:32px;min-height:32px;font-size:16px}
+  .rtab .rx,.rx{min-width:32px;min-height:32px}
+  .rtab .rt{min-height:32px}
+  .sfh{gap:6px}
+}
+
+/* 좁은 화면(360px)에서 가로 넘침 방지 */
+.sim,.simform,.simout,.simgrid>*{min-width:0}
+.sfh,.sfn{min-width:0}.sfn{overflow-wrap:anywhere}
+.kv>*{min-width:0}
+.addlist{min-width:min(300px,100%)}
+.reqctl .sl{min-width:0}
+@media(max-width:480px){
+  .simform,.simout{padding:10px}
+  .sfb{margin-left:8px;padding-left:8px}
+  .sfd,.sfe{margin-left:8px}
+  .kv{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+  .reqctl .sl{flex:1 1 100%}
+  .rtabs{gap:4px}
+  .addres .tfind{max-width:100%}
+}
 
 /* 새 셸에 맞춘 헤더 */
 .sim>.d-title{font:700 24px var(--sans)!important;letter-spacing:-.02em!important;margin:0 0 4px}

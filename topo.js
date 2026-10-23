@@ -95,7 +95,7 @@
     host.innerHTML = `<h3>연결 관계</h3>
       <div class="tctl"><div class="tchips">${typeChips(state, true)}</div>
       <div class="seg" role="group" aria-label="탐색 깊이"><button data-depth="1" aria-pressed="true">1단계</button><button data-depth="2" aria-pressed="false">2단계</button></div></div>
-      <div class="egobox"><div class="gcv"><canvas aria-label="API 연결 관계도"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div></div>
+      <div class="egobox"><div class="gcv"><canvas role="img" aria-label="API 연결 관계도"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div></div>
       <div class="tinfo" id="egoinfo"></div></div>
       <p class="note">노드를 누르면 설명이 옆(좁은 화면에서는 아래)에 나타납니다. 실선은 문서에서 찾은 관계, 점선은 일반적인 구조입니다. 휠로 확대, 드래그로 이동합니다.</p>`;
     const cv = host.querySelector('canvas'), info = host.querySelector('#egoinfo'), box = host.querySelector('.gcv');
@@ -140,15 +140,17 @@
 
   /* ---------- 토폴로지 전체 화면 ---------- */
   function mountFull(host, selId) {
-    const G = C.G, E = C.E, cats = Object.keys(C.CAT).filter(b => G.nodes.some(n => n.book === b));
+    const G = C.G, E = C.E, cats = [...new Set(G.nodes.map(n => n.book))].sort((a, b) => (C.CAT[a] || a).localeCompare(C.CAT[b] || b, 'ko'));
     const state = { types: { mention: true, curated: true, same: true, variant: true }, sel: selId || null, cat: '', q: '', hideIso: false, focused: false };
     const pos = new Map();
     host.innerHTML = `<div class="tctl"><input class="tfind" id="tfind" type="search" placeholder="API 찾아서 강조 (예: route, 네트워크, mcp)" autocomplete="off" aria-label="토폴로지에서 API 찾기">
         <label class="chk"><input type="checkbox" id="tiso"> 연결 없는 API 숨기기</label><button class="btn ghost" id="trelay">배치 다시</button></div>
       <div class="tchips" id="ttypes">${typeChips(state, false)}</div>
-      <div class="tchips cats" id="tcats">${cats.map(b => `<button class="chip" data-tcat="${b}" aria-pressed="false"><i class="dot" style="background:${GraphColor(catIdx[b], dark())}"></i>${esc(C.CAT[b])}</button>`).join('')}</div>
-      <div class="tbody"><div class="gcv big"><canvas aria-label="전체 API 토폴로지"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
-      <div class="tinfo" id="tinfo"></div></div>`;
+      <div class="tchips cats" id="tcats">${cats.map(b => `<button class="chip" data-tcat="${b}" aria-pressed="false"><i class="dot" style="background:${GraphColor(catIdx[b], dark())}"></i>${esc(C.CAT[b] || String(b).replace(/_apis$/, '').replace(/_/g, ' '))}</button>`).join('')}</div>
+      <div class="tbody"><div class="gcv big"><canvas role="img" aria-label="전체 API 토폴로지 그래프. 키보드로는 아래 노드 목록을 사용하세요"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
+      <div class="tinfo" id="tinfo"></div></div>
+      <details class="epd" id="nl"><summary>노드 목록 (키보드·스크린리더용)</summary><div class="in" id="nlist"></div></details>`;
+    cats.forEach(b => { if (!(b in catIdx)) catIdx[b] = Object.keys(catIdx).length; });
     const cv = host.querySelector('canvas'), info = host.querySelector('#tinfo'), box = host.querySelector('.gcv'), stat = host.querySelector('#tstat');
     const hover = tipFor(box);
     const view = new GraphView(cv, { labels: 'auto', rep: 380, edgeLen: 46, gravity: 0.0025, onSelect: n => selectNode(n ? n.id : null), onHover: hover });
@@ -202,6 +204,11 @@
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') C.go('api:' + state.sel);
       if (a.dataset.act === 'focus') { state.focused = !state.focused; applyKeep(); renderInfo(); if (state.focused) view.focusOn(state.sel, 1.2); else view.fit(); }
+    });
+    host.querySelector('#nl').addEventListener('toggle', e => {
+      const box = host.querySelector('#nlist'); if (!e.target.open || box.dataset.ready) return; box.dataset.ready = '1';
+      box.innerHTML = [...view.nodes].sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('');
+      box.addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (b) { selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.scrollIntoView({ block: 'nearest' }); } });
     });
     build(false);
     if (state.sel && view.map.has(state.sel)) view.focusOn(state.sel, 1.5);

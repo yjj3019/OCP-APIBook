@@ -7,11 +7,8 @@
 <meta name="description" content="OpenShift 4.22·4.21·4.20 API 레퍼런스를 한곳에서 검색·비교·설계하는 정적 웹앱">
 <title>OCP API Book</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1420'/%3E%3Ctext x='16' y='21' font-family='monospace' font-size='13' font-weight='700' fill='white' text-anchor='middle'%3EAPI%3C/text%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
-<link rel="preload" href="data/4.22.js?v=3" as="script">
-<link rel="preload" href="data/4.22.fidx.js?v=3" as="script">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <link rel="stylesheet" href="app.css?v=3">
 <link rel="stylesheet" href="sim.css?v=3">
 </head>
@@ -19,7 +16,7 @@
 <a class="skip" href="#main">본문으로 건너뛰기</a>
 <div class="bar" id="bar" aria-hidden="true"></div>
 <header class="topbar">
-  <button class="iconbtn menubtn" id="menubtn" aria-label="메뉴 열기"><span data-ic="menu" data-s="20"></span></button>
+  <button class="iconbtn menubtn" id="menubtn" aria-label="메뉴 열기" aria-controls="side" aria-expanded="false"><span data-ic="menu" data-s="20"></span></button>
   <a class="brand" href="#" aria-label="OCP API Book 홈"><span class="logo">API</span><span class="hide-s">OCP API Book</span></a>
   <button class="searchbtn" id="searchbtn" aria-label="검색 열기 (Ctrl K)"><span data-ic="search" data-s="17"></span><span class="lbl">API, 필드, 가이드 검색…</span><kbd>Ctrl K</kbd></button>
   <span class="spacer"></span>
@@ -48,9 +45,6 @@
 <script src="core.js?v=3"></script>
 <script src="views.js?v=3"></script>
 <script src="palette.js?v=3"></script>
-<script>
-  document.querySelectorAll('[data-ic]').forEach(e => { e.innerHTML = Icon(e.dataset.ic, +e.dataset.s || 16); e.style.display = 'inline-flex'; });
-  App.init();
-</script>
+<script src="boot.js?v=3"></script>
 </body>
 </html>

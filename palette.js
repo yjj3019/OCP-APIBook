@@ -40,7 +40,7 @@
   function itemHTML(it, i, H) {
     if (it.g) return `<div class="palgrp">${it.g}</div>`;
     if (it.empty) return `<div class="empty" style="padding:28px 12px"><b>결과가 없습니다.</b><p class="hint">다른 단어로 검색해 보세요.</p></div>`;
-    const sl = `role="option" data-i="${i}" aria-selected="${i === sel}"`;
+    const sl = `role="option" id="pal-i${i}" data-i="${i}" aria-selected="${i === sel}"`;
     if (it.type === 'cmd') return `<button class="palit" ${sl}><span class="pi">${ic(it.c.i, 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${esc(it.c.t)}</b></span></button>`;
     if (it.type === 'guide') return `<button class="palit" ${sl}><span class="pi">${ic('file-text', 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${App.hlz(it.g2.title, H)}</b><small>가이드</small></span></button>`;
     const a = it.a, gv = (a.group ? a.group + '/' : '') + a.m.gv[App.pickVer(a.m, App.ver)];
@@ -50,16 +50,19 @@
   }
   let H = s => s;
   function render() {
+    if (!U.E) { $('#palres').innerHTML = '<div class="empty" style="padding:28px 12px"><b>검색 데이터를 불러오는 중입니다…</b></div>'; return; }
     const q = $('#palin').value, r = build(q); H = r.H; items = r.out; const act = items.filter(x => x.type);
     sel = Math.min(sel, Math.max(0, items.length - 1)); while (items[sel] && !items[sel].type && sel < items.length - 1) sel++;
     $('#palres').innerHTML = items.map((it, i) => itemHTML(it, i, H)).join('');
-    $('#palres').setAttribute('role', 'listbox');
+    $('#palres').setAttribute('role', 'listbox'); active();
   }
+  function active() { const a = items[sel] && items[sel].type ? 'pal-i' + sel : ''; if (a) $('#palin').setAttribute('aria-activedescendant', a); else $('#palin').removeAttribute('aria-activedescendant'); }
   function move(d) {
     const idx = items.map((x, i) => x.type ? i : -1).filter(i => i >= 0); if (!idx.length) return;
     const p = idx.indexOf(sel); sel = idx[(p + d + idx.length) % idx.length] ?? idx[0];
     App.$$('#palres .palit').forEach(b => b.setAttribute('aria-selected', +b.dataset.i === sel));
     const b = $('#palres .palit[aria-selected="true"]'); if (b) b.scrollIntoView({ block: 'nearest' });
+    active();
   }
   function run(i, mod) {
     const it = items[i]; if (!it || !it.type) return; close();
@@ -72,12 +75,16 @@
   App.openPalette = (initial) => {
     if (open) return; open = true; prevFocus = document.activeElement; const b = box(); b.hidden = false;
     const inp = $('#palin'); inp.value = initial || ''; sel = 0; render(); setTimeout(() => inp.focus(), 0);
+    if (!U.E) App.ready.then(() => { if (open) render(); }).catch(() => {});
   };
   function close() { if (!open) return; open = false; box().hidden = true; if (prevFocus && prevFocus.focus) try { prevFocus.focus(); } catch (e) { /* 무시 */ } }
   App.closePalette = close;
 
+  let helpPrev = null;
+  function closeHelp() { const h = $('#help'); h.hidden = true; if (helpPrev && helpPrev.focus) try { helpPrev.focus(); } catch (e) { /* 무시 */ } helpPrev = null; }
   App.showHelp = () => {
-    const h = $('#help'); if (!h.hidden) { h.hidden = true; return; }
+    const h = $('#help'); if (!h.hidden) { closeHelp(); return; }
+    helpPrev = document.activeElement;
     const K = (...k) => k.map(x => `<kbd>${x}</kbd>`).join('');
     h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="단축키"><div style="display:flex;align-items:center"><h3 style="margin:0">단축키</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
       <dl class="keys" style="margin-top:14px"><dt>${K('Ctrl', 'K')} ${K('/')}</dt><dd>검색 팔레트 열기</dd>
@@ -89,7 +96,8 @@
       <dt>${K('?')}</dt><dd>이 도움말</dd><dt>${K('Esc')}</dt><dd>닫기</dd></dl>
       <p class="note" style="margin-top:16px">${ic('zap', 13)} 색인 ${U.E ? U.E.stats.tokens.toLocaleString('ko-KR') : '-'}단어 · 생성 ${U.E ? Math.round(U.E.stats.buildMs) : '-'}ms · 데이터 로딩 ${Math.round(App.bootMs || 0)}ms</p></div>`;
     h.hidden = false; $('#helpx').focus();
-    h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) h.hidden = true; };
+    h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) closeHelp(); };
+    h.onkeydown = e => { if (e.key === 'Tab') { e.preventDefault(); $('#helpx').focus(); } };
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -99,7 +107,9 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); move(1); } else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (e.key === 'Enter') { e.preventDefault(); run(sel, e.ctrlKey || e.metaKey); }
       else if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Tab') { e.preventDefault(); move(e.shiftKey ? -1 : 1); }   // 팔레트 밖으로 포커스가 나가지 않게 한다
     });
+    inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-controls', 'palres'); inp.setAttribute('aria-expanded', 'true'); inp.setAttribute('aria-autocomplete', 'list');
     $('#palres').addEventListener('click', e => { const b = e.target.closest('.palit'); if (b) run(+b.dataset.i, e.ctrlKey || e.metaKey); });
     $('#palette').addEventListener('mousedown', e => { if (e.target === $('#palette')) close(); });
     $('#searchbtn').addEventListener('click', () => App.openPalette());
@@ -107,7 +117,7 @@
   const typing = el => el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open ? close() : App.openPalette(); return; }
-    if (e.key === 'Escape') { const h = $('#help'); if (h && !h.hidden) { h.hidden = true; return; } if (open) { close(); return; } document.body.classList.remove('nav-open'); return; }
+    if (e.key === 'Escape') { const h = $('#help'); if (h && !h.hidden) { closeHelp(); return; } if (open) { close(); return; } App.closeDrawer(); return; }
     if (typing(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey || open) return;
     if (e.key === '/') { e.preventDefault(); App.openPalette(); return; }
     if (e.key === '?') { e.preventDefault(); App.showHelp(); return; }

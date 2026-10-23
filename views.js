@@ -4,7 +4,7 @@
   const App = window.App, $ = App.$, esc = App.esc, ic = App.ic, MG = App.MG, VL = App.VL, U = App.U;
   const CAT = ApiSearch.CAT_KO, V = App.views;
   const CAT_IC = { network_apis: 'network', monitoring_apis: 'activity', metadata_apis: 'tag', config_apis: 'settings', extension_apis: 'package', schedule_and_quota_apis: 'clock', operator_apis: 'cpu', provisioning_apis: 'server', template_apis: 'file-text', workloads_apis: 'box', operatorhub_apis: 'layers', security_apis: 'shield', autoscale_apis: 'zap', role_apis: 'users', rbac_apis: 'lock', console_apis: 'terminal', machine_apis: 'hard-drive', storage_apis: 'database', policy_apis: 'list', user_and_group_apis: 'users', image_apis: 'package', authorization_apis: 'lock', node_apis: 'cpu', oauth_apis: 'lock', project_apis: 'folder' };
-  const catName = b => CAT[b] || b;
+  const catName = b => CAT[b] || String(b).replace(/_apis$/, '').replace(/_/g, ' ');
   const bset = (a, ver) => App.pickVer(a.m, ver || App.ver);
   const gvOf = (a, ver) => { const v = bset(a, ver); return (a.group ? a.group + '/' : '') + a.m.gv[v]; };
   const docLike = a => ({ a, gv: (a.group ? a.group + '/' : '') + a.version, low: a.kind.toLowerCase(), ns: a.d && a.d.eps.some(e => e.p.includes('{namespace}')) });
@@ -37,7 +37,7 @@
     const page = App.render(`
       <section class="hero">
         <div class="eyebrow">OpenShift Container Platform · ${VL.join(' · ')}</div>
-        <h1>API를 찾고, 비교하고,<br>직접 설계해 보세요</h1>
+        <h1>API를 찾고, 비교하고,<br> 직접 설계해 보세요</h1>
         <p>세 버전의 API 레퍼런스를 한곳에 모았습니다. 필드 이름만 알아도 찾을 수 있고, 버전별 제약과 변경 사항이 함께 표시됩니다.</p>
         <button class="herosearch" id="hs">${ic('search', 20)}<span>API·필드·가이드 검색 (예: route)</span><kbd>Ctrl K</kbd></button>
         <div class="examples">${['route', '네트워크 정책', 'mcp', 'pvc', 'termination', 'deprecated'].map(x => `<a class="chip" href="${App.href('browse:q=' + encodeURIComponent(x))}">${esc(x)}</a>`).join('')}</div>
@@ -62,7 +62,7 @@
   };
 
   /* ====================== 탐색 ====================== */
-  const parseQS = s => { const o = {}; (s || '').split('&').forEach(p => { if (!p) return; const i = p.indexOf('='); o[decodeURIComponent(i < 0 ? p : p.slice(0, i))] = i < 0 ? '' : decodeURIComponent(p.slice(i + 1)); }); return o; };
+  const parseQS = s => { const o = {}; (s || '').split('&').forEach(p => { if (!p) return; const i = p.indexOf('='); o[App.dec(i < 0 ? p : p.slice(0, i))] = i < 0 ? '' : App.dec(p.slice(i + 1)); }); return o; };
   const rowHTML = (r, i, P, H, q) => {
     const a = r.d.a, m = a.m, s = q ? U.E.snippet(r.d, P) : { text: App.firstSent(a.d && a.d.desc.replace(/Compatibility level.*$/s, '')), src: '설명' };
     return `<li><a class="row" data-i="${i}" href="${App.hrefFor(a)}"><div class="l1"><span class="kind">${App.hlz(a.kind, H)}</span><span class="gv">${App.hlz(gvOf(a), H)}</span>${stabBadge(a)}${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span></div>
@@ -82,7 +82,7 @@
         ${fsel('st', '안정성', opt('', '전체', st.st) + opt('ga', 'GA', st.st) + opt('beta', 'Beta', st.st) + opt('alpha', 'Alpha', st.st))}
         ${fsel('cn', '제약', opt('', '전체', st.cn) + opt('dep', '폐지 예정 있음', st.cn) + opt('prev', '미리보기·기능 게이트', st.cn) + opt('imm', '변경 불가 필드', st.cn) + opt('ver', '일부 버전에만 제공', st.cn))}
         <button class="btn ghost sm" id="fclr" hidden>${ic('x', 13)} 필터 초기화</button></div>
-      <div class="count" id="bc"></div><ul class="list" id="bl"></ul><div id="bm" style="margin-top:12px;text-align:center"></div><div id="bg"></div>`);
+      <div class="count" id="bc" aria-live="polite"></div><ul class="list" id="bl"></ul><div id="bm" style="margin-top:12px;text-align:center"></div><div id="bg"></div>`);
     let cur = -1, shown = [], limit = 60, rows = [], P = null, H = null;
     const apply = () => {
       const t0 = performance.now(), q = st.q.trim(), r = E.search(q, { cat: st.cat });
@@ -181,10 +181,10 @@
     const tiers = [...new Set(m.vers.map(v => m.tier && m.tier[v]).filter(Boolean))];
     const tierBy = L.filter(v => m.tier && m.tier[v]).map(v => `${v}: 레벨 ${m.tier[v]}`);
     const items = (type) => m.cons.filter(c => c.t === type);
-    const itemHTML = c => `<div class="citem"><code>${esc(c.p || 'API 전체')}</code>${esc(c.x)}${c.v.length < m.vers.length ? `<span class="vs">${c.v.map(v => `<span class="vp">${v}</span>`).join('')}</span>` : ''}</div>`;
+    const itemHTML = c => `<div class="citem"><code${c.ps && c.ps.length > 1 ? ` title="${esc(c.ps.join(', '))}"` : ''}>${esc(c.p || 'API 전체')}</code>${c.n > 1 ? `<span class="morep">외 ${c.n - 1}곳</span>` : ''}${esc(c.x)}${c.v.length < m.vers.length ? `<span class="vs">${c.v.map(v => `<span class="vp">${v}</span>`).join('')}</span>` : ''}</div>`;
     const grp = (cls, icon, title, right, body, open) => `<details class="cgroup"${open ? ' open' : ''}><summary><span class="ci ${cls}">${ic(icon, 15)}</span><span>${title}</span><span class="ct">${right || ''}${ic('chevron-right', 14, 'chev')}</span></summary>${body}</details>`;
     let h = grp(at ? 'warn' : 'ok', 'layers', '제공 버전', at ? `<span class="badge beta">${esc(at)}</span>` : `<span class="badge ga">전 버전 제공</span>`,
-      `<p class="csum">${at ? `이 API는 <b>${esc(at)}</b>. 선택한 버전에 없으면 가장 최신 제공 버전의 내용을 보여 줍니다.` : `조사한 ${VL.length}개 버전(${VL.join(', ')}) 모두에서 제공됩니다.`}</p><div class="citems"><div class="vrow" style="margin:0">${L.map(v => `<span class="vchip${m.vers.includes(v) ? '' : ' off'}">${v} ${m.vers.includes(v) ? esc(m.gv[v]) : '없음'}</span>`).join('')}</div>${gvChanged ? `<div class="citem">API 버전이 릴리스마다 바뀌었습니다: ${esc(gvs.join(' → '))}. 이전 버전용 매니페스트는 <code>apiVersion</code>을 확인하세요.</div>` : ''}</div>`, true);
+      `<p class="csum">${at ? `제공 범위: <b>${esc(at)}</b>. 선택한 버전에 없으면 가장 최신 제공 버전의 내용을 보여 줍니다.` : `조사한 ${VL.length}개 버전(${VL.join(', ')}) 모두에서 제공됩니다.`}</p><div class="citems"><div class="vrow" style="margin:0">${L.map(v => `<span class="vchip${m.vers.includes(v) ? '' : ' off'}">${v} ${m.vers.includes(v) ? esc(m.gv[v]) : '없음'}</span>`).join('')}</div>${gvChanged ? `<div class="citem">API 버전이 릴리스마다 바뀌었습니다: ${esc(gvs.join(' → '))}. 이전 버전용 매니페스트는 <code>apiVersion</code>을 확인하세요.</div>` : ''}</div>`, true);
     h += grp(stab === 'ga' ? 'ok' : stab === 'beta' ? 'warn' : 'bad', 'shield', '안정성 · 호환성', `<span class="badge ${stab}">${App.STAB[stab][0]}</span>`,
       `<p class="csum"><b>${esc(m.gv[dv])}</b> — ${esc(App.STAB[stab][1])}.</p>${tiers.length ? `<div class="citems">${tiers.map(t => `<div class="citem"><code>호환성 레벨 ${t}</code>${esc(App.TIER[t])}${tierBy.length > 1 && tiers.length === 1 ? '' : ''}</div>`).join('')}${tiers.length > 1 ? `<div class="citem">버전별: ${esc(tierBy.join(' · '))}</div>` : ''}</div>` : '<p class="csum">원문에 호환성 레벨 표기가 없습니다.</p>'}`, stab !== 'ga' || tiers.some(t => t >= 3));
     h += grp('mute', 'box', '범위', `<span class="badge">${m.ns === true ? '네임스페이스' : m.ns === false ? '클러스터' : '정보 없음'}</span>`, `<p class="csum">${m.ns === true ? '네임스페이스 범위 리소스입니다. <code>metadata.namespace</code>가 필요하며 생략하면 현재 프로젝트에 만들어집니다.' : m.ns === false ? '클러스터 범위 리소스입니다. 네임스페이스 없이 전역으로 존재하며 <code>namespace</code>는 무시됩니다.' : '원문 엔드포인트 정보로는 범위를 판단할 수 없습니다.'}</p>`);
@@ -202,7 +202,7 @@
         ${ne ? `<div class="citem"><b>일부 버전에만 있는 엔드포인트</b></div>${m.ediff.map(e => `<div class="citem"><code>${esc(e.e)}</code>${vsp(e.v)}</div>`).join('')}` : ''}${m.trunc ? '<div class="note">항목이 많아 일부만 표시합니다.</div>' : ''}</div>`, false);
     }
     const n = m.cons.length;
-    return `<section class="card consbox" id="c-cons"><div style="display:flex;align-items:center;gap:10px;padding:12px 18px 8px"><span class="ci info" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center">${ic('shield', 16)}</span><b style="font-size:15.5px">제약 · 제한 사항</b><span class="note" style="margin:0 0 0 auto">설명 문장에서 추출 · ${n}건</span></div>${h}</section>`;
+    return `<section class="card consbox" id="c-cons"><div style="display:flex;align-items:center;gap:10px;padding:12px 18px 8px"><span class="ci info" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center">${ic('shield', 16)}</span><b style="font-size:15.5px">제약 · 제한 사항</b><span class="note" style="margin:0 0 0 auto" title="원문 설명 문장에서 패턴 매칭으로 자동 추출했습니다. 오탐이나 누락이 있을 수 있으니 중요한 판단은 원문을 확인하세요.">원문 설명에서 자동 추출 · ${n}건</span></div>${h}</section>`;
   }
   function epsHTML(a, params) {
     const mblock = m => `<div class="mb"><div class="mh"><span class="m ${m.m}">${m.m}</span> ${esc(m.d)}</div>
@@ -217,29 +217,31 @@
     const base = n => n.replace(/(\[\]|\{\})+$/, ''), childOf = (p, n) => { for (const s of ['[]', '{}', '']) { const c = p + '.' + base(n) + s, f = byPath.get(c); if (f && f.r.length) return c; } return null; };
     const visible = (p, r) => !/(\[\]|\{\})$/.test(r[0]) || !rows(p).some(x => x[0] === base(r[0]));
     const chips = path => { const l = consBy.get(path); if (!l) return ''; return `<span class="fcons">${l.map(c => `<span class="cons ${c.t}" title="${esc(c.x)}">${c.t === 'dep' ? ic('alert', 11) + '폐지' : c.t === 'prev' ? ic('flask', 11) + '미리보기' : c.t === 'imm' ? ic('lock', 11) + '변경 불가' : ''}</span>`).join('')}</span>`; };
-    const rowHTML = (p, r) => { const c = childOf(p, r[0]), full = (p + '.' + r[0]).replace(/^\./, ''); return `<div class="fr"><div class="fh${c ? ' has' : ''}"${c ? ` data-p="${esc(c)}"` : ''}><span class="tg">${c ? '▸' : '·'}</span><span class="fn">${esc(r[0])}</span><span class="ftp">${esc(r[1])}</span>${reqs(p).has(r[0]) ? '<span class="req">필수</span>' : ''}${chips(full)}</div><div class="fdsc">${esc(r[2])}</div><div class="fc" hidden></div></div>`; };
+    const rowHTML = (p, r) => { const c = childOf(p, r[0]), full = (p + '.' + r[0]).replace(/^\./, ''); return `<div class="fr"><div class="fh${c ? ' has' : ''}"${c ? ` data-p="${esc(c)}" role="button" tabindex="0" aria-expanded="false"` : ''}><span class="tg">${c ? '▸' : '·'}</span><span class="fn">${esc(r[0])}</span><span class="ftp">${esc(r[1])}</span>${reqs(p).has(r[0]) ? '<span class="req">필수</span>' : ''}${chips(full)}</div><div class="fdsc">${esc(r[2])}</div><div class="fc" hidden></div></div>`; };
     const list = p => rows(p).filter(r => visible(p, r)).map(r => rowHTML(p, r)).join('');
     const all = []; for (const p of [''].concat([...byPath.keys()])) rows(p).forEach(r => { if (!/(\[\]|\{\})$/.test(r[0])) { const path = (p + '.' + r[0]).replace(/^\./, ''); all.push({ path, t: r[1], d: r[2], req: reqs(p).has(r[0]) }); } });
     host.innerHTML = `<div class="ftoolbar"><input class="ff" id="fq" placeholder="필드 검색 (예: tls, termination, port) — ${all.length.toLocaleString('ko-KR')}개 필드" aria-label="필드 검색"><button class="btn ghost sm" id="fexp">${ic('chevron-down', 13)} 1단계 펼치기</button></div><div class="ftree" id="ft">${list('')}</div>`;
     const ft = host.querySelector('#ft'), fq = host.querySelector('#fq');
-    function toggle(h, force) { const box = h.parentElement.querySelector('.fc'), p = h.dataset.p, open = force === undefined ? box.hidden : force; if (open) { if (!box.innerHTML) box.innerHTML = list(p); box.hidden = false; h.querySelector('.tg').textContent = '▾'; } else { box.hidden = true; h.querySelector('.tg').textContent = '▸'; } }
+    function toggle(h, force) { const box = h.parentElement.querySelector('.fc'), p = h.dataset.p, open = force === undefined ? box.hidden : force; if (open) { if (!box.innerHTML) box.innerHTML = list(p); box.hidden = false; h.querySelector('.tg').textContent = '▾'; h.setAttribute('aria-expanded', 'true'); } else { box.hidden = true; h.querySelector('.tg').textContent = '▸'; h.setAttribute('aria-expanded', 'false'); } }
     const sp = ft.querySelector('.fh[data-p=".spec"]'); if (sp) toggle(sp, true);
     ft.addEventListener('click', e => { const h = e.target.closest('.fh.has'); if (h) return toggle(h); const d = e.target.closest('.fdsc'); if (d) d.classList.toggle('open'); });
+    ft.addEventListener('keydown', e => { const h = e.target.closest('.fh.has'); if (h && e.target === h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(h); } });
     host.querySelector('#fexp').addEventListener('click', () => { ft.querySelectorAll(':scope > .fr > .fh.has').forEach(h => toggle(h, true)); });
     fq.addEventListener('input', () => {
       const w = fq.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
       if (!w.length) { ft.innerHTML = list(''); const s = ft.querySelector('.fh[data-p=".spec"]'); if (s) toggle(s, true); return; }
       const hit = all.filter(f => { const hay = (f.path + ' ' + f.d).toLowerCase(); return w.every(x => hay.includes(x)); });
       const re = new RegExp('(' + w.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
-      ft.innerHTML = `<div class="count" style="margin:6px 0">${hit.length}개 일치${hit.length > 120 ? ' (상위 120개)' : ''}</div>` + hit.slice(0, 120).map(f => `<div class="fr flat"><div class="fh"><span class="fn">${esc(f.path).replace(re, '<mark>$1</mark>')}</span><span class="ftp">${esc(f.t)}</span>${f.req ? '<span class="req">필수</span>' : ''}${chips(f.path)}</div><div class="fdsc">${esc(f.d).replace(re, '<mark>$1</mark>')}</div></div>`).join('');
+      const hlr = t => t.split(re).map((p, i) => (i % 2 ? '<mark>' + esc(p) + '</mark>' : esc(p))).join('');
+      ft.innerHTML = `<div class="count" style="margin:6px 0">${hit.length}개 일치${hit.length > 120 ? ' (상위 120개)' : ''}</div>` + hit.slice(0, 120).map(f => `<div class="fr flat"><div class="fh"><span class="fn">${hlr(f.path)}</span><span class="ftp">${esc(f.t)}</span>${f.req ? '<span class="req">필수</span>' : ''}${chips(f.path)}</div><div class="fdsc">${hlr(f.d)}</div></div>`).join('');
     });
   }
-  V.api = async id => {
-    const ver = App.ver; let key = null;
+  V.api = async rawId => {
+    const my = App.activeSeq, id = App.dec(rawId), ver = App.ver; let key = null;
     for (const v of [ver].concat(VL)) { key = U.idKey.get(v + '|' + id); if (key) break; }
-    if (!key) { App.title('찾을 수 없음'); App.render(`<button class="back" onclick="history.back()">${ic('chevron-left', 15)} 뒤로</button><div class="empty"><b>해당 API를 찾을 수 없습니다.</b><p class="hint"><a href="${App.href('browse')}">API 탐색으로 이동</a></p></div>`); return; }
+    if (!key) { App.title('찾을 수 없음'); App.render(`<button class="back" id="bk">${ic('chevron-left', 15)} 뒤로</button><div class="empty"><h1 style="font-size:18px">해당 API를 찾을 수 없습니다.</h1><p class="hint"><a href="${App.href('browse')}">API 탐색으로 이동</a></p></div>`); $('#bk').addEventListener('click', () => history.back()); return; }
     const m = MG.apis[key], dv = App.pickVer(m, ver), missing = !m.vers.includes(ver);
-    await App.loadCore(dv); const db = App.prep(dv); let a = U.byKey.get(key); if (!a || a.rv !== dv) a = db.apis.find(x => x.id === m.id[dv]) || a;
+    await App.loadCore(dv); if (my !== App.activeSeq) return; const db = App.prep(dv); let a = U.byKey.get(key); if (!a || a.rv !== dv) a = db.apis.find(x => x.id === m.id[dv]) || a;
     if (!a.d) { App.render('<div class="empty">이 API의 상세 데이터가 없습니다.</div>'); return; }
     a.key = key; a.m = m; a.cons = m.cons;   // 최신이 아닌 버전의 레코드에도 통합 정보를 붙인다
     App.curKey = key; App.recent.push(key); App.title(a.kind);
@@ -251,22 +253,23 @@
       <section class="card dhead"><div class="top"><div><h1 class="d-title">${esc(a.kind)}</h1><div class="dbadges"><span class="gv">${esc(d.gv)}</span><span class="badge ${stab}" title="${esc(App.STAB[stab][1])}">${App.STAB[stab][0]}</span>${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span>${m.tier && m.tier[dv] ? `<span class="badge info" title="${esc(App.TIER[m.tier[dv]])}">호환성 레벨 ${m.tier[dv]}</span>` : ''}</div></div>
         <div class="dact"><button class="btn ghost" id="favb" aria-pressed="${fav}">${ic(fav ? 'star-fill' : 'star', 15)} <span>${fav ? '즐겨찾기됨' : '즐겨찾기'}</span></button><button class="btn ghost" id="cpb">${ic('copy', 15)} 이름 복사</button><a class="btn primary" href="${App.href('sim:' + m.id[dv])}">${ic('flask', 15)} 시뮬레이터에서 설계</a></div></div>
         ${missing ? `<div class="isum" style="margin-top:14px;background:var(--warn-soft);color:var(--warn)">${ic('info', 14)} 선택한 <b>${ver}</b>에는 없는 API입니다. 제공되는 가장 최신 버전(<b>${dv}</b>) 기준으로 보여 줍니다.</div>` : ''}
-        <div class="vrow"><span class="note" style="margin:0">제공 버전</span>${VL.slice().reverse().map(v => m.vers.includes(v) ? `<a class="vchip${v === dv ? ' on' : ''}" href="${hrefV(v)}" title="${m.fp[v] !== m.fp[dv] ? '선택 버전과 필드·엔드포인트가 다릅니다' : '선택 버전과 같습니다'}">${v} ${esc(m.gv[v])}${m.fp[v] !== m.fp[dv] ? ' ●' : ''}</a>` : `<span class="vchip off">${v} 없음</span>`).join('')}</div>
+        <div class="vrow"><span class="note" style="margin:0">제공 버전</span>${VL.slice().reverse().map(v => m.vers.includes(v) ? `<a class="vchip${v === dv ? ' on' : ''}" href="${hrefV(v)}" title="${m.fp[v] !== m.fp[dv] ? '선택 버전과 필드·엔드포인트가 다릅니다' : '선택 버전과 같습니다'}">${v} ${esc(m.gv[v])}${m.fp[v] !== m.fp[dv] ? ' ●' : ''}</a>` : `<span class="vchip off">${v} 없음</span>`).join('')}<span class="note" style="margin:0">● 선택한 버전과 다름</span></div>
         <p class="lead">${esc(first)}</p>${rest ? `<button class="more" id="more">자세히 보기</button><div class="full" id="full" hidden>${esc(rest)}</div>` : ''}
         ${x.required.length ? `<p class="note" style="margin-top:10px">반드시 넣어야 하는 필드: ${x.required.map(r => `<code class="req">${esc(r)}</code>`).join(' ')}</p>` : ''}
       </section>
       <div style="margin-top:16px">${consCard(a, m, dv)}</div>
-      <div class="sticky-tabs"><div class="tabs" id="stabs">${tabs.map(([i, l, ico]) => `<a href="#" data-sec="${i}" class="${i === 'c-cons' ? 'on' : ''}">${ic(ico, 14)} ${l}</a>`).join('')}</div></div>
+      <div class="sticky-tabs"><div class="tabs" id="stabs">${tabs.map(([i, l, ico]) => `<a href="#" data-sec="${i}" class="${i === 'c-cons' ? 'on' : ''}"${i === 'c-cons' ? ' aria-current="true"' : ''}>${ic(ico, 14)} ${l}</a>`).join('')}</div></div>
       <section id="c-usage"><h2 class="sec">사용 예시</h2><div class="code"><div class="codehead" role="tablist"><button role="tab" data-t="0" aria-selected="true">YAML</button><button role="tab" data-t="1" aria-selected="false">oc 명령</button><button role="tab" data-t="2" aria-selected="false">REST</button><button class="cp" id="cp">${ic('copy', 14)} 복사</button></div><pre><code id="codeb"></code></pre></div><p class="note">필수 필드(하위 필드 포함)로 만든 기본 틀입니다. 값은 필드 설명을 보고 채우세요. 실제 검증은 <a href="${App.href('sim:' + m.id[dv])}">시뮬레이터</a>에서 할 수 있습니다.</p></section>
       <section id="c-fields"><h2 class="sec">필드 <span class="c">${x.props.length}개 최상위</span></h2><div id="fieldhost"><div class="skel" style="height:120px"></div></div></section>
       <section id="c-eps"><h2 class="sec">엔드포인트 <span class="c">${x.eps.length}개</span></h2><div id="epshost">${epsHTML(a, db.params || {})}</div></section>
       <section id="c-rel"><h2 class="sec">관계</h2><div id="ego"><div class="skel" style="height:160px"></div></div></section>
-      <a class="ext" href="${esc(a.url)}" target="_blank" rel="noopener">${ic('external', 14)} 공식 문서에서 전체 설명 보기</a>`);
+      <a class="ext" href="${esc(App.safeUrl(a.url))}" target="_blank" rel="noopener">${ic('external', 14)} 공식 문서에서 전체 설명 보기</a>`);
     // 코드 탭
     const tabsC = [['yaml', yamlFull(d, null)], ['bash', ocFor(d)], ['bash', restFor(d)]]; let ct = 0;
-    const setCode = i => { ct = i; App.$$('.codehead [data-t]').forEach((b, j) => b.setAttribute('aria-selected', j === i)); $('#codeb').innerHTML = App.hi(tabsC[i][1], tabsC[i][0]); };
+    const setCode = i => { ct = i; App.$$('.codehead [data-t]').forEach((b, j) => { b.setAttribute('aria-selected', j === i); b.tabIndex = j === i ? 0 : -1; }); $('#codeb').innerHTML = App.hi(tabsC[i][1], tabsC[i][0]); };
     setCode(0);
     $('.codehead').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) setCode(+b.dataset.t); });
+    $('.codehead').addEventListener('keydown', e => { if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return; e.preventDefault(); const n = (ct + (e.key === 'ArrowRight' ? 1 : -1) + 3) % 3; setCode(n); App.$$('.codehead [data-t]')[n].focus(); });
     $('#cp').addEventListener('click', e => App.copy(tabsC[ct][1], e.currentTarget));
     $('#favb').addEventListener('click', () => { const on = App.fav.toggle(key); $('#favb').setAttribute('aria-pressed', on); $('#favb').innerHTML = `${ic(on ? 'star-fill' : 'star', 15)} <span>${on ? '즐겨찾기됨' : '즐겨찾기'}</span>`; App.toast(on ? '즐겨찾기에 추가했습니다' : '즐겨찾기에서 뺐습니다', on ? 'star-fill' : 'star'); });
     $('#cpb').addEventListener('click', e => App.copy(`${d.gv} ${a.kind}`, e.currentTarget));
@@ -274,15 +277,16 @@
     // 섹션 탭: 스크롤 이동 + 현재 위치 강조
     const secs = tabs.map(t => document.getElementById(t[0]));
     $('#stabs').addEventListener('click', e => { const t = e.target.closest('[data-sec]'); if (!t) return; e.preventDefault(); const el = document.getElementById(t.dataset.sec); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 118, behavior: 'smooth' }); });
-    const io = new IntersectionObserver(es => { es.forEach(en => { if (en.isIntersecting) App.$$('#stabs a').forEach(t => t.classList.toggle('on', t.dataset.sec === en.target.id)); }); }, { rootMargin: '-120px 0px -65% 0px' });
+    const io = new IntersectionObserver(es => { es.forEach(en => { if (en.isIntersecting) App.$$('#stabs a').forEach(t => { const on = t.dataset.sec === en.target.id; t.classList.toggle('on', on); if (on) t.setAttribute('aria-current', 'true'); else t.removeAttribute('aria-current'); }); }); }, { rootMargin: '-120px 0px -65% 0px' });
     secs.forEach(s => s && io.observe(s));
     // 중첩 필드(큰 파일)는 뒤늦게, 관계도는 화면에 들어올 때
     let dead = false, live = null;
-    const consBy = new Map(); m.cons.forEach(c => { if (c.p && ['dep', 'prev', 'imm'].includes(c.t)) { if (!consBy.has(c.p)) consBy.set(c.p, []); consBy.get(c.p).push(c); } });
-    App.getFields(dv).then(FA => {
+    const consBy = new Map(); m.cons.forEach(c => { if (['dep', 'prev', 'imm'].includes(c.t)) (c.ps && c.ps.length ? c.ps : (c.p ? [c.p] : [])).forEach(p => { if (!consBy.has(p)) consBy.set(p, []); consBy.get(p).push(c); }); });
+    const loadF = () => App.getFields(dv).then(FA => {
       if (dead) return; const F = FA[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
       tabsC[0][1] = yamlFull(d, F); if (ct === 0 && $('#codeb')) setCode(0);
-    }).catch(() => { const fh = $('#fieldhost'); if (fh) fh.innerHTML = '<p class="note">중첩 필드 데이터를 불러오지 못했습니다.</p>'; });
+    }).catch(() => { const fh = $('#fieldhost'); if (!fh) return; fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드 데이터를 불러오지 못했습니다.</p><button class="btn ghost sm" id="fretry">다시 시도</button></div>'; $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); }); });
+    loadF();
     const relIO = new IntersectionObserver(async es => {
       if (!es.some(e => e.isIntersecting)) return; relIO.disconnect();
       try { const [eng] = await Promise.all([App.engines(dv), App.lazyGraph()]); if (dead) return; Topo.init({ E: eng.E, G: eng.G, CAT, esc, go: App.nav, hash: App.href }); const host = $('#ego'); host.innerHTML = ''; live = Topo.mountEgo(host, m.id[dv]); } catch (e) { const h = $('#ego'); if (h) h.innerHTML = '<p class="note">관계도를 불러오지 못했습니다.</p>'; }
@@ -295,7 +299,7 @@
   V.compare = async arg => {
     App.title('버전 비교'); App.curKey = null;
     const qs = parseQS(arg), to0 = VL.includes(qs.to) ? qs.to : App.ver, from0 = VL.includes(qs.from) ? qs.from : (VL[VL.indexOf(to0) + 1] || VL[VL.indexOf(to0) - 1]);
-    let tab = qs.tab || 'changed';
+    let tab = ['added', 'removed', 'changed', 'same'].includes(qs.tab) ? qs.tab : 'changed';
     App.render(`<div class="pagehead"><div class="eyebrow">버전 비교</div><h1>어떤 API가 달라졌나</h1><p>두 버전 사이에서 추가·삭제·변경된 API를 봅니다. 변경은 필드·타입·엔드포인트나 API 버전(v1beta1 → v1)이 달라진 경우입니다.</p></div>
       <div class="browsebar"><label class="fchip">기준<select id="cf" aria-label="기준 버전">${VL.map(v => `<option${v === from0 ? ' selected' : ''}>${v}</option>`).join('')}</select></label>${ic('arrow-right', 16)}<label class="fchip">대상<select id="ct" aria-label="대상 버전">${VL.map(v => `<option${v === to0 ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
         <div class="qbox" style="max-width:300px">${ic('search', 17)}<input id="cq" placeholder="API 이름으로 거르기" aria-label="이름 필터"></div></div><div id="cres"></div>`);
@@ -319,39 +323,45 @@
   };
 
   /* ====================== 가이드 ====================== */
-  V.guide = async id => {
-    App.title('가이드'); App.curKey = null; await App.loadCore(App.ver); const G = App.prep(App.ver).guide;
+  V.guide = async rawId => {
+    const my = App.activeSeq, id = App.dec(rawId);
+    App.title('가이드'); App.curKey = null; await App.loadCore(App.ver); if (my !== App.activeSeq) return; const G = App.prep(App.ver).guide;
     const g = id && G.find(s => s.id === id);
     if (!g) {
+      if (id) App.toast('해당 가이드를 찾을 수 없어 목록을 보여 드립니다', 'info');
       App.render(`<div class="pagehead"><div class="eyebrow">가이드 · ${App.ver}</div><h1>API 지원 단계와 정책</h1><p>API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정 문서입니다. 상단 검색에서 본문도 찾을 수 있습니다.</p></div><ul class="list guidelist">${G.filter(x => x.level <= 3 && !/^Overview|^API overview|^OpenShift Container/.test(x.title)).map(x => `<li><a class="row" href="${App.href('guide:' + x.id)}" style="${x.level === 3 ? 'margin-left:18px;width:calc(100% - 18px)' : ''}"><span style="font-weight:${x.level === 2 ? 600 : 400}">${esc(x.title)}</span></a></li>`).join('')}</ul>`);
       return;
     }
     App.title(g.title);
-    App.render(`<button class="back" id="gb">${ic('chevron-left', 15)} 가이드 목록</button><div class="pagehead"><h1 style="font-size:22px">${esc(g.title)}</h1></div><div class="guide">${g.html}</div>`);
+    App.render(`<button class="back" id="gb">${ic('chevron-left', 15)} 가이드 목록</button><div class="pagehead"><h1 style="font-size:22px">${esc(g.title)}</h1></div><div class="guide">${App.sanitize(g.html)}</div>`);
     $('#gb').onclick = () => App.nav('guide');
     App.$$('.guide pre').forEach(p => { const t = p.textContent; p.innerHTML = App.hi(t, 'bash'); const b = document.createElement('button'); b.className = 'copy'; b.innerHTML = ic('copy', 13) + ' 복사'; b.onclick = e => App.copy(t, e.currentTarget); p.prepend(b); });
   };
 
   /* ====================== 토폴로지 · 시뮬레이터 ====================== */
-  V.topology = async sel => {
+  V.topology = async rawSel => {
+    const my = App.activeSeq, sel = App.dec(rawSel);
     App.title('토폴로지'); App.curKey = null; const ver = App.ver;
     App.render(`<div class="pagehead"><div class="eyebrow">토폴로지 · ${ver}</div><h1>API 사이의 연결</h1><p>색은 분류, 크기는 연결 수입니다. 노드를 누르면 설명과 연결 목록이 오른쪽에 나옵니다. 점선은 문서가 아니라 일반적인 구조를 정리한 관계입니다.</p></div><div id="topo"><div class="skel" style="height:420px"></div></div>`, true);
     const [eng] = await Promise.all([App.engines(ver), App.lazyGraph()]);
+    if (my !== App.activeSeq) return;
     Topo.init({ E: eng.E, G: eng.G, CAT, esc, go: App.nav, hash: App.href });
     const host = $('#topo'); if (!host) return; host.innerHTML = '';
     const live = Topo.mountFull(host, eng.G.byId.has(sel) ? sel : null);
     return () => live && live.destroy && live.destroy();
   };
-  V.sim = async id => {
+  V.sim = async rawId => {
+    const my = App.activeSeq, id = App.dec(rawId);
     App.title('API 설계 시뮬레이터'); App.curKey = null; const ver = App.ver;
-    App.render('<div id="simhost"><div class="skel" style="height:420px"></div></div>', true);
+    App.render('<h1 class="sr-only">API 설계 시뮬레이터</h1><div id="simhost"><div class="skel" style="height:420px"></div></div>', true);
     const [eng] = await Promise.all([App.engines(ver), App.lazySim()]);
+    if (my !== App.activeSeq) return;
     let want = id; const key = id && (U.idKey.get(ver + '|' + id) || (VL.map(v => U.idKey.get(v + '|' + id)).find(Boolean)));
     if (key) { const m = MG.apis[key]; want = m.id[ver] || ''; if (!want) App.toast(`${ver}에는 ${m.kind}가 없어 다른 리소스로 시작합니다`, 'info'); }
-    const ctx = { E: eng.E, G: eng.G, CAT, esc, ver, VER: window.VERSIONS || { list: VL }, db: eng.db, go: App.nav, hash: App.href, getFields: () => App.getFields(ver), docOf: i => eng.E.docs.find(d => d.a.id === i), short: App.short, firstSent: App.firstSent };
+    const ctx = { E: eng.E, G: eng.G, CAT, esc, ver, VER: { list: VL }, db: eng.db, go: App.nav, hash: App.href, getFields: () => App.getFields(ver), docOf: i => eng.E.docs.find(d => d.a.id === i), short: App.short, firstSent: App.firstSent };
     const host = $('#simhost'); if (!host) return; host.innerHTML = '';
     const live = Sim.mount(host, ctx, want || '');
     return () => live && live.destroy && live.destroy();
   };
-  V.notfound = async () => { App.title('찾을 수 없음'); App.render(`<div class="empty"><b>페이지를 찾을 수 없습니다.</b><p class="hint"><a href="${App.href('')}">홈으로</a></p></div>`); };
+  V.notfound = async () => { App.title('찾을 수 없음'); App.render(`<div class="empty"><h1 style="font-size:18px">페이지를 찾을 수 없습니다.</h1><p class="hint"><a href="${App.href('')}">홈으로</a></p></div>`); };
 })();

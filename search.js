@@ -6,7 +6,7 @@
     template_apis: '템플릿', workloads_apis: '워크로드', operatorhub_apis: '오퍼레이터허브', security_apis: '보안',
     autoscale_apis: '오토스케일', role_apis: '역할', rbac_apis: 'RBAC', console_apis: '콘솔', machine_apis: '머신',
     storage_apis: '스토리지', policy_apis: '정책', user_and_group_apis: '사용자·그룹', image_apis: '이미지',
-    authorization_apis: '권한', node_apis: '노드', oauth_apis: '인증(OAuth)', project_apis: '프로젝트',
+    authorization_apis: '권한', node_apis: '노드', oauth_apis: '인증(OAuth)', project_apis: '프로젝트', cluster_apis: 'Cluster API',
   };
   const CAT_EN = k => k.replace(/_apis$/, '').replace(/_/g, ' ');
 

@@ -5,9 +5,9 @@
    ===================================================================== */
 :root{
   --bg:#f5f6f9; --surface:#ffffff; --surface-2:#eff1f6; --surface-3:#e6e9f0;
-  --ink:#0d1420; --ink-2:#364255; --sub:#637086; --line:#e2e6ee; --line-2:#cfd6e2;
+  --ink:#0d1420; --ink-2:#364255; --sub:#566379; --line:#e2e6ee; --line-2:#cfd6e2;
   --accent:#2d5bff; --accent-ink:#1d44d8; --accent-soft:#e9efff; --accent-line:#bccaff;
-  --ok:#13805a; --ok-soft:#e4f5ed; --warn:#a15a00; --warn-soft:#fff2dd; --bad:#cb3427; --bad-soft:#fdebe9;
+  --ok:#0e6b49; --ok-soft:#e4f5ed; --warn:#8a4f00; --warn-soft:#fff2dd; --bad:#b32a1f; --bad-soft:#fdebe9;
   --mark:#ffe99a; --code-bg:#0e1522; --code-ink:#dbe3f1; --code-line:#222c3d;
   --tk-k:#8db3ff; --tk-s:#9fe3b9; --tk-n:#ffc784; --tk-b:#d6a8ff; --tk-c:#66758c; --tk-p:#8493ab; --tk-v:#ff9d9d; --tk-cmd:#7fd8e9; --tk-f:#ebc680; --tk-u:#9fbaff;
   --shadow-1:0 1px 2px rgba(15,23,42,.06),0 1px 1px rgba(15,23,42,.04);
@@ -38,13 +38,13 @@
 
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:calc(var(--top-h) + 64px);-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.65 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;background:var(--bg);color:var(--ink);word-break:keep-all;overflow-wrap:break-word;font:14.5px/1.65 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:var(--accent-ink);text-decoration:none}
 a:hover{text-decoration:underline}
 button{font:inherit;color:inherit;cursor:pointer}
 input,select,textarea{font:inherit;color:inherit}
 code,pre,kbd{font-family:var(--mono)}
-mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+mark{background:var(--mark);color:var(--ink);border-radius:3px;padding:0 1px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 ::selection{background:var(--accent-soft)}
 .ic{flex:none;vertical-align:-3px}
@@ -397,3 +397,27 @@ table{border-collapse:collapse}
 @media (max-width:1100px){.stats,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:860px){.egobox,.tbody{grid-template-columns:minmax(0,1fr)}.gcv{height:340px}.gcv.big{height:62vh}.tinfo{max-height:none}.hero{padding:28px 20px}.g2,.g3{grid-template-columns:minmax(0,1fr)}.dact{margin-left:0}}
 @media (max-width:520px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.g4{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- 검토 반영: 접근성·대비·좁은 화면 ---------- */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.main{min-height:calc(100vh - var(--top-h))}
+.btn.primary{color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#0a0e15}}
+:root[data-theme="dark"] .btn.primary{color:#0a0e15}
+.citems,.citem,.csum{min-width:0;overflow-wrap:anywhere}
+.citem code{overflow-wrap:anywhere;white-space:normal}
+.morep{margin:0 6px 0 0;color:var(--sub);font-size:12px}
+.empty{overflow-wrap:anywhere}
+.fh.has{border-radius:6px}
+.fh.has:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cons,.badge{word-break:keep-all}
+@media (pointer:coarse){
+  .iconbtn{width:44px;height:44px}
+  .vsel{height:40px}
+  .chip,.fchip{min-height:36px}
+  .fchip select{min-height:32px}
+  .btn{height:40px}.btn.sm{height:34px}
+  .palit{padding:11px 10px}
+  .navitem,.sideitem{min-height:40px}
+  .tabs button,.sticky-tabs .tabs a{min-height:40px}
+}

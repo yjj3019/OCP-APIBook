@@ -26,15 +26,15 @@
     ['Pod', 'PersistentVolumeClaim', '볼륨 마운트'], ['Pod', 'ConfigMap', '설정 사용'], ['Pod', 'Secret', '비밀 사용'], ['Pod', 'ServiceAccount', '실행 계정'], ['Pod', 'Node', '스케줄됨'],
     ['DeploymentLog', 'DeploymentConfig', '로그'], ['DeploymentRequest', 'DeploymentConfig', '배포 요청'], ['DeploymentConfigRollback', 'DeploymentConfig', '롤백'],
     // 스토리지
-    ['PersistentVolumeClaim', 'PersistentVolume', '바인딩'], ['PersistentVolumeClaim', 'StorageClass', '클래스 사용'], ['PersistentVolume', 'StorageClass', '클래스 소속'], ['StorageClass', 'CSIDriver', '프로비저너'],
+    ['PersistentVolumeClaim', 'PersistentVolume', '바인딩'], ['PersistentVolumeClaim', 'StorageClass', '클래스 사용'], ['PersistentVolume', 'StorageClass', '클래스 지정'], ['StorageClass', 'CSIDriver', '프로비저너'],
     ['CSINode', 'CSIDriver', '드라이버 정보'], ['ClusterCSIDriver', 'CSIDriver', '관리'], ['VolumeSnapshot', 'VolumeSnapshotClass', '클래스 사용'], ['VolumeSnapshot', 'PersistentVolumeClaim', '원본'],
     ['VolumeSnapshotContent', 'VolumeSnapshot', '실제 스냅샷'], ['VolumeAttachment', 'PersistentVolume', '노드에 연결'],
     // 권한·인증
     ['RoleBinding@' + R, 'Role@' + R, '역할 부여'], ['ClusterRoleBinding@' + R, 'ClusterRole@' + R, '역할 부여'],
-    ['RoleBinding@' + R, 'ServiceAccount', '대상'], ['RoleBinding@' + R, 'User', '대상'], ['RoleBinding@' + R, 'Group', '대상'],
-    ['ClusterRoleBinding@' + R, 'ServiceAccount', '대상'], ['ClusterRoleBinding@' + R, 'User', '대상'], ['ClusterRoleBinding@' + R, 'Group', '대상'],
+    ['RoleBinding@' + R, 'ServiceAccount', '주체'], ['RoleBinding@' + R, 'User', '주체'], ['RoleBinding@' + R, 'Group', '주체'],
+    ['ClusterRoleBinding@' + R, 'ServiceAccount', '주체'], ['ClusterRoleBinding@' + R, 'User', '주체'], ['ClusterRoleBinding@' + R, 'Group', '주체'],
     ['SecurityContextConstraints', 'ServiceAccount', '허용 대상'], ['SecurityContextConstraints', 'User', '허용 대상'], ['SecurityContextConstraints', 'Group', '허용 대상'],
-    ['User', 'Identity', '로그인 연결'], ['UserIdentityMapping', 'User', '매핑'], ['UserIdentityMapping', 'Identity', '매핑'], ['Group', 'User', '구성원'],
+    ['Identity', 'User', '사용자 매핑'], ['UserIdentityMapping', 'User', '매핑'], ['UserIdentityMapping', 'Identity', '매핑'], ['Group', 'User', '구성원'],
     ['OAuthAccessToken', 'OAuthClient', '발급 클라이언트'], ['OAuthAccessToken', 'User', '사용자'], ['OAuthAuthorizeToken', 'OAuthClient', '발급 클라이언트'],
     ['OAuthClientAuthorization', 'OAuthClient', '승인'], ['OAuthClientAuthorization', 'User', '승인 사용자'], ['UserOAuthAccessToken', 'OAuthAccessToken', '조회'],
     ['ServiceAccount', 'Secret', '토큰'], ['TokenRequest', 'ServiceAccount', '토큰 발급'],
@@ -42,7 +42,7 @@
     ['Project@project.openshift.io', 'Namespace', '1:1 대응'], ['ProjectRequest', 'Project@project.openshift.io', '생성'], ['ProjectHelmChartRepository', 'Project@project.openshift.io', '소속'],
     ['ResourceQuota', 'Namespace', '제한'], ['LimitRange', 'Namespace', '제한'], ['ClusterResourceQuota', 'Namespace', '여러 네임스페이스 제한'], ['AppliedClusterResourceQuota', 'ClusterResourceQuota', '적용 결과'],
     // 머신·노드
-    ['MachineSet', 'Machine', '생성'], ['ControlPlaneMachineSet', 'Machine', '생성'], ['Machine', 'Node', '대응'], ['MachineAutoscaler', 'MachineSet', '크기 조정'], ['ClusterAutoscaler', 'MachineAutoscaler', '정책'],
+    ['MachineSet', 'Machine', '생성'], ['ControlPlaneMachineSet', 'Machine', '생성'], ['Machine', 'Node', '대응'], ['MachineAutoscaler', 'MachineSet', '크기 조정'], ['ClusterAutoscaler', 'MachineAutoscaler', '연동'],
     ['MachineHealthCheck', 'Machine', '감시'], ['MachineHealthCheck', 'Node', '감시'],
     ['MachineConfigPool', 'MachineConfig', '선택'], ['MachineConfigPool', 'Node', '대상'], ['KubeletConfig', 'MachineConfigPool', '대상'], ['ContainerRuntimeConfig', 'MachineConfigPool', '대상'],
     ['MachineConfigNode', 'Node', '노드 상태'], ['MachineConfigNode', 'MachineConfigPool', '풀 소속'], ['ControllerConfig', 'MachineConfig', '렌더링'],
@@ -68,7 +68,7 @@
     ['Prometheus', 'ServiceMonitor', '수집 대상'], ['Prometheus', 'PodMonitor', '수집 대상'], ['Prometheus', 'Probe', '수집 대상'], ['Prometheus', 'PrometheusRule', '규칙'], ['Prometheus', 'Alertmanager', '알림 전송'],
     ['Alertmanager', 'AlertmanagerConfig', '설정'], ['ThanosRuler', 'PrometheusRule', '규칙'], ['ServiceMonitor', 'Service', '모니터링'], ['PodMonitor', 'Pod', '모니터링'], ['AlertingRule', 'PrometheusRule', '규칙 생성'],
     // 콘솔
-    ['ConsolePlugin', 'Console@config.openshift.io', '확장'], ['ConsoleLink', 'Console@config.openshift.io', '표시'], ['ConsoleCLIDownload', 'Console@config.openshift.io', '표시'],
+    ['ConsolePlugin', 'Console@operator.openshift.io', '확장'], ['ConsoleLink', 'Console@config.openshift.io', '표시'], ['ConsoleCLIDownload', 'Console@config.openshift.io', '표시'],
     ['ConsoleNotification', 'Console@config.openshift.io', '표시'], ['ConsoleQuickStart', 'Console@config.openshift.io', '표시'], ['ConsoleExternalLogLink', 'Console@config.openshift.io', '표시'],
     // 어드미션·확장
     ['ValidatingAdmissionPolicyBinding', 'ValidatingAdmissionPolicy', '정책 연결'], ['ValidatingWebhookConfiguration', 'Service', '웹훅 호출'], ['MutatingWebhookConfiguration', 'Service', '웹훅 호출'],
@@ -76,13 +76,13 @@
     // 확장 네트워크·IPAM
     ['AdminPolicyBasedExternalRoute', 'Namespace', '적용'], ['AdminPolicyBasedExternalRoute', 'Pod', '게이트웨이 선택'], ['CloudPrivateIPConfig', 'EgressIP', '클라우드 IP 할당'], ['EgressRouter', 'Pod', '라우터 생성'], ['EgressFirewall', 'DNSNameResolver', '도메인 해석'],
     ['NetworkAttachmentDefinition', 'IPPool@whereabouts.cni.cncf.io', 'IP 할당 기록'], ['NodeSlicePool', 'NetworkAttachmentDefinition', '노드별 슬라이스'], ['OverlappingRangeIPReservation', 'IPPool@whereabouts.cni.cncf.io', '중복 범위 예약'],
-    ['IPAMClaim', 'NetworkAttachmentDefinition', '고정 IP 예약'], ['IPAddress@ipam.cluster.x-k8s.io', 'IPAddressClaim', '요청 충족'],
+    ['IPAMClaim', 'NetworkAttachmentDefinition', '고정 IP 예약'], ['IPAddress@ipam.cluster.x-k8s.io', 'IPAddressClaim', '요청 충족'], ['Service', 'IPAddress@networking.k8s.io', '클러스터 IP 할당'],
     // DRA(동적 리소스 할당)
     ['Pod', 'ResourceClaim', '장치 요청'], ['Pod', 'ResourceClaimTemplate', '장치 요청 템플릿'], ['ResourceClaim', 'DeviceClass', '장치 클래스 사용'], ['ResourceClaim', 'ResourceSlice', '장치 할당'], ['ResourceSlice', 'Node', '노드 장치 목록'],
     // 코어 부가 리소스
     ['Binding', 'Pod', '바인딩'], ['Binding', 'Node', '스케줄 대상'], ['Eviction@policy', 'Pod', '축출'], ['Eviction@policy', 'PodDisruptionBudget', '예산 확인'],
-    ['PriorityClass', 'Pod', '우선순위 부여'], ['RuntimeClass', 'Pod', '런타임 지정'], ['FlowSchema', 'PriorityLevelConfiguration', '우선순위 지정'], ['Lease@coordination.k8s.io', 'Node', '노드 하트비트'],
-    ['NodeMetrics', 'Node', '지표'], ['PodMetrics', 'Pod', '지표'], ['VolumePopulator', 'PersistentVolumeClaim', '데이터 채움'], ['TokenReview', 'User', '토큰 검증'],
+    ['Pod', 'PriorityClass', '우선순위'], ['Pod', 'RuntimeClass', '런타임 클래스'], ['FlowSchema', 'PriorityLevelConfiguration', '우선순위 지정'], ['Lease@coordination.k8s.io', 'Node', '노드 하트비트'],
+    ['NodeMetrics', 'Node', '지표'], ['PodMetrics', 'Pod', '지표'], ['PersistentVolumeClaim', 'VolumePopulator', '데이터 소스'], ['TokenReview', 'User', '토큰 검증'],
     ['StorageVersionMigration', 'StorageState', '상태 기록'], ['KubeStorageVersionMigrator', 'StorageVersionMigration', '관리'],
     // 보안·설정
     ['PodSecurityPolicyReview', 'SecurityContextConstraints', '평가'], ['PodSecurityPolicySubjectReview', 'SecurityContextConstraints', '평가'], ['PodSecurityPolicySelfSubjectReview', 'SecurityContextConstraints', '평가'],
@@ -126,15 +126,16 @@
       const e = { s: s.id, t: t.id, type, labels: label ? [label] : [], w: w || 1 };
       seen.set(k, e); edges.push(e);
     }
-    function pick(kind, from, pref) {
+    function pick(kind, from, pref, strict) {   // strict: 'Kind@group' 으로 그룹을 지정한 경우 — 그 그룹에 없으면 null
       const c = byKind.get(kind); if (!c) return null;
+      if (strict && pref) return c.find(n => n.group === pref) || null;
       if (c.length === 1) return c[0];
       if (pref) { const p = c.find(n => n.group === pref); if (p) return p; }
       return c.find(n => n.group === from.group) || c.find(n => n.book === from.book) || c.find(n => !n.group) || c[0];
     }
     function resolve(spec, from) {
       const [kind, pref] = spec.split('@');
-      return pick(kind, from || {}, pref);
+      return pick(kind, from || {}, pref, true);
     }
 
     // 1) 일반 관계(큐레이션)

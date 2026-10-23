@@ -41,7 +41,7 @@
       this.sel = opt.sel || null; this.hover = null;
       const warm = opt.warm === undefined ? 220 : opt.warm;
       for (let i = 0; i < warm; i++) this.tick(Math.max(0.05, 1 - i / warm));
-      this.fit(opt.fitPad); this.alpha = opt.animate === false ? 0 : 0.25; this.request();
+      this.fit(opt.fitPad); this.alpha = (opt.animate === false || matchMedia('(prefers-reduced-motion: reduce)').matches) ? 0 : 0.25; this.request();
     }
     tick(a) {
       const ns = this.nodes, n = ns.length, rep = this.o.rep;
