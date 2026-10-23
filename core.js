@@ -1,6 +1,7 @@
 /* 앱 코어: 상태·저장소·지연 로딩·통합 검색 엔진·라우터·셸(사이드바/테마/토스트) */
 (function () {
   'use strict';
+  const SELF = document.currentScript;
   const App = window.App = { V: (window.MERGED && window.MERGED.build) || '0', views: {}, U: {}, ENG: {}, t0: performance.now() };
   const $ = App.$ = (s, r) => (r || document).querySelector(s);
   App.$$ = (s, r) => [...(r || document).querySelectorAll(s)];
@@ -59,9 +60,11 @@
   };
 
   /* ---------- 지연 로딩 ---------- */
+  App.CODE_V = ((SELF && SELF.src.match(/[?&]v=([^&]+)/)) || [])[1] || '0';   // 코드는 index.html 의 ?v= 토큰, 데이터는 MERGED.build 를 쓴다
   const loaded = {};
+  App.unlazy = (...srcs) => srcs.forEach(s => { delete loaded[s]; });
   App.lazy = (...srcs) => Promise.all(srcs.map(s => loaded[s] || (loaded[s] = new Promise((ok, no) => {
-    const e = document.createElement('script'); e.src = s + (s.includes('?') ? '' : '?v=' + App.V); e.onload = ok; e.onerror = () => { delete loaded[s]; no(new Error(s + ' 로드 실패')); }; document.head.appendChild(e);
+    const e = document.createElement('script'); e.src = s + (s.includes('?') ? '' : '?v=' + (s.startsWith('data/') ? App.V : App.CODE_V)); e.onload = ok; e.onerror = () => { delete loaded[s]; no(new Error(s + ' 로드 실패')); }; document.head.appendChild(e);
   }))));
   App.lazyGraph = () => App.lazy('graph.js', 'viz.js', 'topo.js');
   App.lazySim = () => App.lazy('graph.js', 'sim.js');
@@ -69,8 +72,27 @@
   /* ---------- 데이터 ---------- */
   const MG = App.MG = window.MERGED, VL = App.VL = MG.list, LATEST = App.LATEST = MG.default;
   const DB = window.DB = window.DB || {};
-  App.loadCore = v => DB[v] ? Promise.resolve() : App.lazy(`data/${v}.js`, `data/${v}.fidx.js`);
-  App.getFields = async v => { await App.lazy(`data/${v}.fields.js`); return window.FIELDS[v]; };
+  App.loadCore = async v => {
+    if (DB[v] && window.FIDX && FIDX[v]) return;
+    const a = `data/${v}.js`, b = `data/${v}.fidx.js`;
+    try { await App.lazy(a, b); if (!DB[v] || !window.FIDX || !FIDX[v]) throw new Error('손상'); }
+    catch (e) { App.unlazy(a, b); throw new Error('데이터 파일을 불러오지 못했거나 손상되었습니다'); }   // 구문 오류도 load 이벤트가 오므로 전역 값을 확인한다
+  };
+  /* 필드 상세는 data/<버전>.fields.<book>.js 로 나뉘어 있고, 같은 전역 맵 FIELDS[버전]에 병합된다 */
+  App.fields = v => { window.FIELDS = window.FIELDS || {}; return window.FIELDS[v] || (window.FIELDS[v] = {}); };
+  const bookOf = {};
+  App.ensureFields = async (v, id) => {
+    await App.loadCore(v);
+    const m = bookOf[v] || (bookOf[v] = new Map(DB[v].apis.map(x => [x.id, x.book])));
+    const book = m.get(id); if (!book) return;
+    const src = `data/${v}.fields.${book}.js`;
+    try { await App.lazy(src); } catch (e) { App.unlazy(src); throw e; }
+  };
+  App.getFields = async v => {   // 버전 전체(모든 책) — 필요한 경우에만 쓴다
+    await App.loadCore(v);
+    await Promise.all([...new Set(DB[v].apis.map(x => x.book))].map(b => App.lazy(`data/${v}.fields.${b}.js`)));
+    return App.fields(v);
+  };
   App.prep = v => {
     const db = DB[v]; if (db._ok) return db;
     const fi = (window.FIDX && FIDX[v]) || {};
@@ -90,7 +112,7 @@
   const U = App.U;
   App.boot = async () => {
     const t = performance.now();
-    await Promise.all([App.loadCore(LATEST), App.lazy('data/legacy.js')]);
+    await Promise.all([App.loadCore(LATEST), window.LEGACY ? 0 : App.lazy('data/legacy.js')]);
     const db = App.prep(LATEST), lg = window.LEGACY;
     lg.apis.forEach(a => { a.fp = lg.fidx[a.id] || []; if (a.d) a.d.eps.forEach(e => { e.m = e.ms.map(x => x.m + ': ' + x.d); }); });
     const apis = db.apis.concat(lg.apis);
@@ -143,7 +165,7 @@
     const r = document.documentElement; if (App.theme === 'system') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', App.theme);
     const b = $('#themebtn'); if (b) { b.innerHTML = App.ic(App.theme === 'dark' ? 'moon' : App.theme === 'light' ? 'sun' : 'monitor', 18); b.title = '테마: ' + ({ system: '시스템', light: '라이트', dark: '다크' })[App.theme] + ' (클릭하여 변경)'; b.setAttribute('aria-label', b.title); }
   };
-  App.cycleTheme = () => { App.theme = THEMES[(THEMES.indexOf(App.theme) + 1) % 3]; LS.set('theme', App.theme); App.applyTheme(); App.toast('테마: ' + ({ system: '시스템', light: '라이트', dark: '다크' })[App.theme], 'sun'); if (App.cur) go(); };
+  App.cycleTheme = () => { App.theme = THEMES[(THEMES.indexOf(App.theme) + 1) % 3]; LS.set('theme', App.theme); App.applyTheme(); App.toast('테마: ' + ({ system: '시스템', light: '라이트', dark: '다크' })[App.theme], 'sun'); window.dispatchEvent(new Event('themechange')); };
 
   /* ---------- 라우터 ---------- */
   App.dec = s => { try { return decodeURIComponent(s); } catch (e) { return s; } };
@@ -195,6 +217,12 @@
     App.$$('.sideitem[data-key]').forEach(e => e.setAttribute('aria-current', String(name === 'api' && e.dataset.key === App.curKey)));
   }
   function renderSide() {
+    const ae = document.activeElement;
+    const fk = ae && ae.closest && ae.closest('#side') ? (ae.dataset.key ? '[data-key="' + ae.dataset.key + '"]' : (ae.getAttribute('href') ? '[href="' + ae.getAttribute('href') + '"]' : null)) : null;
+    renderSideInner();
+    if (fk) { const el = $('#side ' + fk); if (el) el.focus(); }
+  }
+  function renderSideInner() {
     const s = $('#side'); if (!s || !U.byKey) return;
     const fav = App.fav.list().filter(k => U.byKey.has(k)), rec = App.recent.list().filter(k => U.byKey.has(k) && !fav.includes(k)).slice(0, 6);
     const item = k => { const a = U.byKey.get(k); return `<li><a class="sideitem" data-key="${esc(k)}" href="${App.hrefFor(a)}"><span class="k">${esc(a.kind)}</span><span class="n">${esc(a.m.gv[App.pickVer(a.m, App.ver)])}</span></a></li>`; };
@@ -203,7 +231,7 @@
       ${fav.length ? `<div class="sidehead">즐겨찾기</div><ul class="sidelist">${fav.map(item).join('')}</ul>` : ''}
       ${rec.length ? `<div class="sidehead">최근 본 API</div><ul class="sidelist">${rec.map(item).join('')}</ul>` : ''}
       <div class="sidehead">분류</div><ul class="sidelist">${cats.map(([b, n]) => `<li><a class="sideitem" href="${App.href('browse:cat=' + b)}"><span class="k" style="font-family:var(--sans)">${esc(ApiSearch.CAT_KO[b] || b)}</span><span class="n">${n}</span></a></li>`).join('')}</ul>
-      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString('ko-KR')}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소 · Apache-2.0</a></div>`;
+      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString('ko-KR')}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="#" id="aboutlink">${App.ic('info', 13)} 정보 · 고지 · 저장 설정</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소 · Apache-2.0</a></div>`;
     markNav(App.cur);
   }
   App.renderSide = renderSide;
@@ -224,7 +252,7 @@
     $('#scrim').addEventListener('click', () => App.closeDrawer());
     mq.addEventListener('change', App.syncDrawer); App.syncDrawer();
     $('#helpbtn').addEventListener('click', () => App.showHelp && App.showHelp());
-    document.addEventListener('click', e => { if (e.target.closest('#helplink')) { e.preventDefault(); App.showHelp && App.showHelp(); } });
+    document.addEventListener('click', e => { if (e.target.closest('#helplink')) { e.preventDefault(); App.showHelp && App.showHelp(); } else if (e.target.closest('#aboutlink')) { e.preventDefault(); App.showAbout && App.showAbout(); } });
     window.addEventListener('hashchange', go);
     App.ready = App.boot().then(() => { renderSide(); });
     if (!location.hash) history.replaceState(null, '', '#' + App.ver + '/');

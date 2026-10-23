@@ -13,7 +13,34 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const all = fs.readdirSync(SRC).map(f => (f.match(/^v(\d+\.\d+)\.json$/) || [])[1]).filter(Boolean);
 const vers = (process.argv.length > 2 ? process.argv.slice(2) : all).sort((a, b) => parseFloat(b) - parseFloat(a));
-const WINDOW = (name, v, obj) => `(window.${name}=window.${name}||{})[${JSON.stringify(v)}]=${JSON.stringify(obj)};\n`;
+const HDR = '/* Derived from the Red Hat OpenShift Container Platform documentation (Apache-2.0); extracted and reformatted, with generated constraint summaries. See NOTICE. */\n';
+const WINDOW = (name, v, obj) => HDR + `(window.${name}=window.${name}||{})[${JSON.stringify(v)}]=${JSON.stringify(obj)};\n`;
+const WINDOW_MERGE = (name, v, obj) => HDR + `(window.${name} = window.${name} || {})[${JSON.stringify(v)}] = Object.assign((window.${name} || {})[${JSON.stringify(v)}] || {}, ${JSON.stringify(obj)});\n`;
+
+// ───────── 출력 단계 정리: 제로 폭 문자 제거, 이상 타입 정리, 잘린 설명 표시 ─────────
+const ZW = /[​‌‍﻿]/g;
+const CUT = ' …(원문에서 계속)';
+const OLD_CAP = { desc: 8000, prop: 4000, fdesc: 3000, row: 4000 };   // 과거 수집 시 스크레이퍼 상한(현재 scrape.js 는 상향됨; 기존 _scrape 원본에만 해당)
+const deepZ = o => typeof o === 'string' ? o.replace(ZW, '') : Array.isArray(o) ? o.map(deepZ) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, x]) => [deepZ(k), deepZ(x)])) : o;
+const cleanT = t => String(t == null ? '' : t).replace(/`/g, '').replace(/\s+/g, ' ').trim();
+const stats = { emptyType: 0, truncMarked: 0 };
+function fixApi(d) {
+  if (!d) return d;
+  const m = (s, cap) => { if (typeof s === 'string' && s.length >= cap - 1) { stats.truncMarked++; return s + CUT; } return s; };
+  d.desc = m(d.desc, OLD_CAP.desc);
+  const hasSub = p => d.fields.some(g => g.p === p || g.p.startsWith(p + '.') || g.p.startsWith(p + '[]'));
+  for (const p of d.props) { p.d = m(p.d, OLD_CAP.prop); const t = cleanT(p.t); if (!t) stats.emptyType++; p.t = t || (hasSub('.' + p.n) ? 'object' : ''); }
+  for (const f of d.fields) {
+    f.d = m(f.d, OLD_CAP.fdesc);
+    const ft = cleanT(f.t); if (!ft) stats.emptyType++; f.t = ft || (f.r.length ? 'object' : '');
+    for (const r of f.r) {
+      r[2] = m(r[2], OLD_CAP.row);
+      const t = cleanT(r[1]); if (!t) stats.emptyType++;
+      r[1] = t || (hasSub(f.p + '.' + r[0]) ? 'object' : '');
+    }
+  }
+  return d;
+}
 const nt = t => String(t == null ? '' : t).replace(/_v\d+/g, '');   // 원문 타입 접미사(_v2 등)는 버전마다 달라 비교에서 제외(화면용 원본 문자열은 그대로 둠)
 const fp = o => crypto.createHash('md5').update(JSON.stringify(o)).digest('hex').slice(0, 8);
 
@@ -24,8 +51,10 @@ const report = {};
 
 for (const v of vers) {
   const R = read(path.join(SRC, `v${v}.json`));
+  for (const id in R.apis) fixApi(R.apis[id]);   // 잘림 표시·타입 정리는 원본 길이 기준이라 제로 폭 제거보다 먼저
+  Object.assign(R, deepZ({ index: R.index, guide: R.guide, apis: R.apis, params: R.params }));
   const guide = R.guide.filter(s => s.id && s.id !== 'api-index').map(s => ({ id: s.id, level: s.level, title: s.title, html: s.html }));
-  const apis = [], fidx = {}, fields = {};
+  const apis = [], fidx = {}, fields = {}, bookOf = {};
   let missing = 0;
 
   // 원문 오류 방어: 같은 앵커를 가리키는 행이 둘이면 이름이 앵커와 맞는 행만 남긴다(예: 4.20의 IPAddress → IPAddressClaim)
@@ -50,7 +79,7 @@ for (const v of vers) {
     const paths = new Set(d.props.map(p => p.n));
     for (const f of d.fields) for (const r of f.r) paths.add((f.p + '.' + r[0]).replace(/^\./, ''));
     fidx[id] = [...paths];
-    if (d.fields.length) fields[id] = d.fields;
+    if (d.fields.length) { fields[id] = d.fields; bookOf[id] = book; }
 
     // 버전 간 비교용 지문: 필드 경로+타입, 엔드포인트 경로+메서드
     const sig = { f: d.props.map(p => p.n + ':' + nt(p.t)), n: d.fields.flatMap(f => f.r.map(r => f.p + '.' + r[0] + ':' + nt(r[1]))), e: d.eps.map(e => e.p + ' ' + e.ms.map(m => m.m).join(',')) };
@@ -62,9 +91,14 @@ for (const v of vers) {
   const outW = (name, txt) => { fs.writeFileSync(path.join(OUT, name), txt); HASH.push([name, txt]); };
   outW(`${v}.js`, WINDOW('DB', v, { guide, apis, params: R.params }));
   outW(`${v}.fidx.js`, WINDOW('FIDX', v, fidx));
-  outW(`${v}.fields.js`, WINDOW('FIELDS', v, fields));
-  const sz = f => (fs.statSync(path.join(OUT, f)).size / 1048576).toFixed(2) + 'MB';
-  report[v] = { apis: apis.length, missing, dropped, guide: guide.length, files: [`${v}.js ${sz(v + '.js')}`, `${v}.fidx.js ${sz(v + '.fidx.js')}`, `${v}.fields.js ${sz(v + '.fields.js')}`] };
+  const byBook = {};
+  for (const id in fields) (byBook[bookOf[id]] ||= {})[id] = fields[id];
+  for (const f of fs.readdirSync(OUT)) if (f === v + '.fields.js' || f.startsWith(v + '.fields.')) fs.unlinkSync(path.join(OUT, f));   // 옛 단일 파일·이전 책 파일 정리
+  const bfiles = [];
+  for (const b of Object.keys(byBook).sort()) { const fn = v + '.fields.' + b + '.js'; outW(fn, WINDOW_MERGE('FIELDS', v, byBook[b])); bfiles.push(fn); }
+  const fsz = f => fs.statSync(path.join(OUT, f)).size;
+  const sz = f => (fsz(f) / 1048576).toFixed(2) + 'MB';
+  report[v] = { apis: apis.length, missing, dropped, guide: guide.length, files: [v + '.js ' + sz(v + '.js'), v + '.fidx.js ' + sz(v + '.fidx.js'), 'fields x' + bfiles.length + ' max ' + sz(bfiles.slice().sort((a, b) => fsz(b) - fsz(a))[0]) + ' total ' + (bfiles.reduce((a, f) => a + fsz(f), 0) / 1048576).toFixed(2) + 'MB'] };
 }
 
 // 변경 요약(버전 쌍별)
@@ -75,7 +109,7 @@ for (let i = 0; i < vers.length - 1; i++) {
   summary[`${b}→${a}`] = { 추가: added, 삭제: removed, 변경: changed, 동일: same };
 }
 meta.summary = summary;
-{ const t = 'window.VERSIONS=' + JSON.stringify(meta) + ';\n'; fs.writeFileSync(path.join(OUT, 'versions.js'), t); HASH.push(['versions.js', t]); }
+{ const t = HDR + 'window.VERSIONS=' + JSON.stringify(meta) + ';\n'; fs.writeFileSync(path.join(OUT, 'versions.js'), t); HASH.push(['versions.js', t]); }
 console.log(JSON.stringify({ report, summary }, null, 1));
 
 // ───────── 버전 통합(data/merged.js) + 제약 추출 + 레거시(data/legacy.js) ─────────
@@ -84,21 +118,21 @@ const PAT = {
   // `will be removed` 단독은 오탐(예: "oldest backup will be removed") — 폐기/향후 릴리스 표지와 함께일 때만
   dep: /deprecat|no longer (supported|used|recommended|needed)|obsolete|planned for removal|scheduled for removal|(will be|is being) removed.{0,200}(no longer|obsolete|in a future release|next (API |major )?(version|release))|(no longer|obsolete|in a future release|next (API |major )?(version|release)).{0,200}(will be|is being) removed/i,
   // `feature gate` 단독은 제외(대부분 GA/기본 활성 게이트 설명). 기술 프리뷰·alpha/beta 표기가 함께일 때만 유지
-  prev: /Technology Preview|Tech Preview|TechPreviewNoUpgrade|DevPreviewNoUpgrade|CustomNoUpgrade|Developer Preview|alpha[- ]level|beta[- ]level|this field is alpha|alpha field|\((alpha|beta)\)|(alpha|beta) (feature|field|API)|(alpha|beta|experimental|preview)\b.{0,60}feature ?gate|feature ?gate.{0,60}\b(alpha|beta|experimental|preview|disabled by default)/i,
+  prev: /Technology Preview|Tech Preview|TechPreviewNoUpgrade|DevPreviewNoUpgrade|CustomNoUpgrade|Developer Preview|alpha[- ]level|beta[- ]level|this field is alpha|alpha field|\((alpha|beta)\)|(alpha|beta) (feature|field|API)|(alpha|beta|experimental|preview)\b.{0,60}feature ?gate|feature ?gate.{0,60}\b(alpha|beta|experimental|preview|disabled by default)|(requires|depends on|enabled by|only (available|valid|allowed|effective) (when|if|with)).{0,90}feature ?gate|feature ?gate.{0,50}(must|needs? to|has to) be enabled/i,
   single: /singleton|canonical name is|only one .{0,40} (may|can|will) exist|is named .?cluster|name .{0,20}must be .?cluster/i,
   excl: /mutually exclusive|exactly one of|at most one of|only one of|one and only one|only one (field|option|of)|cannot be (set|specified|used) (together|at the same time|with(?! more than))/i,
   limit: /at most \d+|at least \d+|no more than \d+|no fewer than \d+|between \d+ and \d+|maximum( of)? \d+|minimum( of)? \d+|up to \d+|must be (a )?(positive|non-negative|between|greater|less)|valid values (are|include)|allowed values|must be one of|must match (the )?(regex|regular expression|pattern|format|^)|must be a (valid|DNS|RFC)|max length|length of .{0,40} (must|cannot|should|is limited)/i,
   cond: /only (valid|applicable|used|allowed|supported|effective|honou?red|considered) (when|if|for|with|in)|ignored (if|when|unless)|must be set (when|if)|is required (when|if)|required when|only when|has no effect (if|when|unless)|applies only|not applicable/i,
 };
 // 유형별 추가 제외 규칙(문장·경로·API 종류 기준)
-const IMM_BAD = /immutable (representation|container image|osImage|image)|underlying immutable|contains the immutable|cannot be (modified|changed) due|^Headers cannot be modified/i;
+const IMM_BAD = /immutable (representation|container image|osImage|image)|underlying immutable|contains the immutable|cannot be modified due to/i;
 const EXTRA = {
   imm: (s) => !IMM_BAD.test(s),
   prev: (s, p, kind) => kind !== 'FeatureGate' && !/^status\.featureGates/.test(p),
   single: (s, p) => p === '',   // 최상위(API 자체 설명)에서만
 };
 const PRIO = ['dep', 'prev', 'imm', 'single', 'excl', 'cond', 'limit'];
-const CAP = { imm: 15, dep: 40, prev: 20, single: 3, excl: 32, cond: 12, limit: 10 };   // 묶음((유형,문장)) 기준 상한
+const CAP = { imm: 15, dep: 40, prev: 20, single: 3, excl: 32, cond: 12, limit: 24 };   // 묶음((유형,문장)) 기준 상한
 const ALLRX = new RegExp(Object.values(PAT).map(r => r.source).join('|'), 'i');
 const SKIP_PATH = /^(apiVersion|kind|metadata)(\.|$)/;
 const NOISE = /^(Is required when creating resources|APIVersion defines|Kind is a string value|Standard object.?s metadata|metadata is the standard|Servers may infer|Cannot be updated\.?$|In CamelCase|More info:|Compatibility level \d)/i;
@@ -170,6 +204,18 @@ function shape(d) {   // 경로 -> 타입 / 필수 경로 / 엔드포인트
   for (const e of d.eps) eps.add(e.p + ' ' + e.ms.map(m => m.m).sort().join(','));
   return { types, req, eps };
 }
+// 부모 경로가 같은 버전 목록(v)으로 통째로 추가/삭제된 경우 하위 항목을 지우고 가장 가까운 부모에 sub(지워진 하위 수)를 더한다
+function collapse(list) {
+  const key = x => x.v.join();
+  const parent = x => { let best = null; for (const y of list) if (y !== x && key(y) === key(x) && (x.p.startsWith(y.p + '.') || x.p.startsWith(y.p + '[].')) && (!best || y.p.length > best.p.length)) best = y; return best; };
+  const out = [];
+  for (const x of list) {
+    let a = parent(x); if (!a) { out.push(x); continue; }
+    for (let b; (b = parent(a)); ) a = b;   // 부모도 지워지면 최상위 부모에 합산
+    a.sub = (a.sub || 0) + 1;
+  }
+  return out;
+}
 const LIM = { fdiff: 120, tdiff: 60, rdiff: 60, ediff: 40, cons: 120 };
 const mergedApis = {}, legacy = { apis: [], fidx: {} };
 const allKeys = new Set(vers.flatMap(v => Object.keys(KEEP[v] || {})));
@@ -212,6 +258,7 @@ for (const key of allKeys) {
     for (const p of rp) { const pv = sv.filter(v => shapes[v].req.has(p)); if (pv.length < sv.length) diff.rdiff.push({ p, v: pv }); }
     const ep = new Set(sv.flatMap(v => [...shapes[v].eps]));
     for (const e of ep) { const pv = sv.filter(v => shapes[v].eps.has(e)); if (pv.length < sv.length) diff.ediff.push({ e, v: pv }); }
+    for (const k of ['fdiff', 'rdiff']) diff[k] = collapse(diff[k]);
     for (const k in diff) {
       diff[k].sort(k === 'ediff' ? (a, b) => (a.e < b.e ? -1 : 1) : (a, b) => shallow(a.p, b.p));
       if (diff[k].length > LIM[k]) { diff[k] = diff[k].slice(0, LIM[k]); trunc = true; }
@@ -225,12 +272,13 @@ for (const key of allKeys) {
     if (L.paths) legacy.fidx[L.id] = L.paths;
   }
 }
-const legacyTxt = 'window.LEGACY=' + JSON.stringify(legacy) + ';\n';
-const mergedBody = JSON.stringify({ list: vers, default: vers[0], apis: mergedApis });
+const legacyTxt = HDR + 'window.LEGACY=' + JSON.stringify(legacy) + ';\n';
+const mergedBody = HDR + JSON.stringify({ list: vers, default: vers[0], apis: mergedApis });
 // build: data/ 모든 산출물(merged 본문·legacy·versions·버전별 파일) 내용 해시 -> 지연 로딩 ?v= 캐시 토큰
 const bh = crypto.createHash('sha1');
 for (const [n, t] of [...HASH, ['merged', mergedBody], ['legacy.js', legacyTxt]].sort((a, b) => a[0] < b[0] ? -1 : 1)) bh.update(n + '\u0000' + t.length + '\u0000').update(t);
 const build = bh.digest('hex').slice(0, 12);
-fs.writeFileSync(path.join(OUT, 'merged.js'), 'window.MERGED=' + JSON.stringify({ list: vers, default: vers[0], build, apis: mergedApis }) + ';\n');
+fs.writeFileSync(path.join(OUT, 'merged.js'), HDR + 'window.MERGED=' + JSON.stringify({ list: vers, default: vers[0], build, apis: mergedApis }) + ';\n');
 fs.writeFileSync(path.join(OUT, 'legacy.js'), legacyTxt);
 console.log(`merged ${Object.keys(mergedApis).length} apis, legacy ${legacy.apis.length}`);
+console.log(JSON.stringify(stats));

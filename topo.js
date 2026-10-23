@@ -83,7 +83,7 @@
   }
 
   /* ---------- 공통: 노드/간선 구성 ---------- */
-  function mkNode(n, deg, over) { return Object.assign({ id: n.id, label: n.kind, color: colorOf(n), r: 6 + Math.min(9, Math.sqrt(deg) * 1.7), deg, book: n.book }, over || {}); }
+  function mkNode(n, deg, over) { return Object.assign({ id: n.id, label: n.kind, color: colorOf(n), ci: catIdx[n.book] || 0, r: 6 + Math.min(9, Math.sqrt(deg) * 1.7), deg, book: n.book }, over || {}); }
   function labelFix(nodes) {
     const cnt = {}; nodes.forEach(n => cnt[n.label] = (cnt[n.label] || 0) + 1);
     nodes.forEach(n => { if (cnt[n.label] > 1) { const g = C.G.byId.get(n.id).group; n.label += ' · ' + (g ? g.split('.')[0] : 'core'); } });
@@ -143,6 +143,7 @@
     const G = C.G, E = C.E, cats = [...new Set(G.nodes.map(n => n.book))].sort((a, b) => (C.CAT[a] || a).localeCompare(C.CAT[b] || b, 'ko'));
     const state = { types: { mention: true, curated: true, same: true, variant: true }, sel: selId || null, cat: '', q: '', hideIso: false, focused: false };
     const pos = new Map();
+    cats.forEach(b => { if (!(b in catIdx)) catIdx[b] = Object.keys(catIdx).length; });   // 칩 색을 만들기 전에 인덱스를 확정
     host.innerHTML = `<div class="tctl"><input class="tfind" id="tfind" type="search" placeholder="API 찾아서 강조 (예: route, 네트워크, mcp)" autocomplete="off" aria-label="토폴로지에서 API 찾기">
         <label class="chk"><input type="checkbox" id="tiso"> 연결 없는 API 숨기기</label><button class="btn ghost" id="trelay">배치 다시</button></div>
       <div class="tchips" id="ttypes">${typeChips(state, false)}</div>
@@ -210,9 +211,11 @@
       box.innerHTML = [...view.nodes].sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('');
       box.addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (b) { selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.scrollIntoView({ block: 'nearest' }); } });
     });
+    const onTheme = () => host.querySelectorAll('#tcats [data-tcat]').forEach(b => { const d = b.querySelector('.dot'); if (d) d.style.background = GraphColor(catIdx[b.dataset.tcat] || 0, dark()); });
+    window.addEventListener('themechange', onTheme);
     build(false);
     if (state.sel && view.map.has(state.sel)) view.focusOn(state.sel, 1.5);
-    return { destroy: () => view.destroy() };
+    return { destroy: () => { window.removeEventListener('themechange', onTheme); view.destroy(); } };
   }
 
   root.Topo = { init, mountEgo, mountFull };

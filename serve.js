@@ -12,14 +12,14 @@ const T = 'text/', U = '; charset=utf-8';
 const MIME = { '.html': T + 'html' + U, '.js': T + 'javascript' + U, '.css': T + 'css' + U, '.json': 'application/json' + U,
   '.svg': 'image/svg+xml' + U, '.txt': T + 'plain' + U, '.md': T + 'markdown' + U, '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']);
-// 허용 목록: "루트 직하 파일(확장자 허용) + data/ 하위"만 서빙. 그 밖의 폴더(tools, _scrape, node_modules, .git ...)는 이름과 무관하게 거부.
+// 허용 목록: "루트 직하 파일(확장자 허용) + data/, fonts/ 하위"만 서빙. 그 밖의 폴더(tools, _scrape, node_modules, .git ...)는 이름과 무관하게 거부.
 const ROOT_NOEXT = new Set(['LICENSE', 'NOTICE']);                                          // 확장자 없는 공개 문서
 const ROOT_DENY = new Set(['serve.js', 'build.js', 'package.json', 'package-lock.json']);   // 개발용 파일은 서빙 안 함
 // 보안 헤더. CSP 는 인라인 스크립트/이벤트 핸들러를 막아 XSS 피해를 줄인다(script-src 에 'unsafe-inline' 금지).
-// style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문, 구글 폰트만 외부 허용. base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
+// style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 폰트는 fonts/ 에서 자체 제공하므로 외부 출처를 허용하지 않는다. base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin' };
 
 const realpath = p => new Promise(ok => fs.realpath.native(p, (e, r) => ok(e ? null : r)));
@@ -30,7 +30,7 @@ function allowed(real) {
   const parts = rel.split(path.sep), name = parts[parts.length - 1], ext = path.extname(name).toLowerCase();
   if (parts.some(s => s.startsWith('.'))) return false;
   if (parts.length === 1) return !ROOT_DENY.has(name) && (ROOT_NOEXT.has(name) || ext in MIME);
-  return parts[0] === 'data' && ext in MIME;
+  return (parts[0] === 'data' || parts[0] === 'fonts') && ext in MIME;
 }
 // URL 경로 -> 실제 파일 경로(허용되지 않거나 없으면 null). 디렉터리는 index.html 로.
 async function resolve(urlPath) {

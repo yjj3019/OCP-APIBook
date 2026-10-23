@@ -22,9 +22,12 @@
       this.sel = null; this.hover = null; this.keep = null; this.alpha = 0; this.raf = 0; this.dirty = true; this.w = 300; this.h = 300;
       this.ptr = new Map(); this._bind();
       this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(canvas.parentElement);
+      this._cc = null; this._tc = () => { this._cc = null; this.request(); };
+      window.addEventListener('themechange', this._tc); this._mq = matchMedia('(prefers-color-scheme: dark)'); this._mq.addEventListener('change', this._tc);
       this.resize();
     }
-    destroy() { cancelAnimationFrame(this.raf); this.ro.disconnect(); this.dead = true; }
+    destroy() { cancelAnimationFrame(this.raf); this.ro.disconnect(); window.removeEventListener('themechange', this._tc); this._mq.removeEventListener('change', this._tc); this.dead = true; }
+    colors() { return this._cc || (this._cc = { dark: isDark(), ink: css('--ink') || '#111', sub: css('--sub') || '#666', line: css('--line') || '#ccc', accent: css('--accent') || '#2d5bff', bg: css('--bg') || '#fff', panel: css('--panel') || '#fff' }); }
     resize() {
       const p = this.c.parentElement, w = Math.max(200, p.clientWidth), h = Math.max(200, p.clientHeight);
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -97,8 +100,7 @@
       return best;
     }
     draw() {
-      const ctx = this.ctx, v = this.view, dark = isDark();
-      const ink = css('--ink') || '#111', sub = css('--sub') || '#666', line = css('--line') || '#ccc', accent = css('--accent') || '#d92d20', bg = css('--bg') || '#fff', panel = css('--panel') || '#fff';
+      const ctx = this.ctx, v = this.view, { dark, ink, sub, line, accent, bg, panel } = this.colors();
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.clearRect(0, 0, this.w, this.h);
       ctx.translate(v.x, v.y); ctx.scale(v.k, v.k);
       const focus = this.sel || this.hover, fset = focus ? new Set([focus, ...(this.nb.get(focus) || [])]) : null;
@@ -123,7 +125,7 @@
       // 노드
       for (const n of this.nodes) {
         const on = bright(n.id) && (!this.keep || this.keep.has(n.id));
-        ctx.globalAlpha = on ? 1 : (this.o.dimNode === undefined ? 0.14 : this.o.dimNode); ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 6.2832); ctx.fill();
+        ctx.globalAlpha = on ? 1 : (this.o.dimNode === undefined ? 0.14 : this.o.dimNode); ctx.fillStyle = n.ci !== undefined ? catColor(n.ci, dark) : n.color; ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 6.2832); ctx.fill();
         if (n.id === this.sel || n.center) { ctx.lineWidth = 2.5 / Math.sqrt(v.k); ctx.strokeStyle = n.id === this.sel ? accent : ink; ctx.stroke(); ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 3 / Math.sqrt(v.k), 0, 6.2832); ctx.lineWidth = 1.2 / Math.sqrt(v.k); ctx.stroke(); }
         else { ctx.lineWidth = 1 / v.k; ctx.strokeStyle = panel; ctx.stroke(); }
       }

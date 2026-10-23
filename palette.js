@@ -51,7 +51,7 @@
   let H = s => s;
   function render() {
     if (!U.E) { $('#palres').innerHTML = '<div class="empty" style="padding:28px 12px"><b>검색 데이터를 불러오는 중입니다…</b></div>'; return; }
-    const q = $('#palin').value, r = build(q); H = r.H; items = r.out; const act = items.filter(x => x.type);
+    const q = $('#palin').value, r = build(q); H = r.H; items = r.out;
     sel = Math.min(sel, Math.max(0, items.length - 1)); while (items[sel] && !items[sel].type && sel < items.length - 1) sel++;
     $('#palres').innerHTML = items.map((it, i) => itemHTML(it, i, H)).join('');
     $('#palres').setAttribute('role', 'listbox'); active();
@@ -130,4 +130,26 @@
       if (e.key === 'f') { const b = $('#favb'); if (b) b.click(); } else if (e.key === 's') { const b = $('#tosim') || document.querySelector('.dact a.btn.primary'); if (b) b.click(); }
     }
   });
+
+  /* 정보·고지·저장 설정 삭제 */
+  App.showAbout = () => {
+    const h = $('#help'); if (!h.hidden) closeHelp();
+    helpPrev = document.activeElement;
+    h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="정보와 고지"><div style="display:flex;align-items:center"><h3 style="margin:0">정보 · 고지</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
+      <p style="margin-top:14px"><b>OCP API Book</b>은 <b>비공식</b> 프로젝트입니다. Red Hat, Inc.와 제휴·후원·보증 관계가 없습니다.</p>
+      <p>API 설명·필드·엔드포인트는 Red Hat OpenShift Container Platform 4.20~4.22 문서에서 수집했고, 원문은 Apache License 2.0으로 공개되어 있습니다. 이 프로젝트도 Apache License 2.0을 따르며 변경 사항은 NOTICE에 적었습니다.</p>
+      <p>"제약·제한 사항"은 원문 설명에서 자동 추출한 것이라 정확하지 않을 수 있습니다. 중요한 판단은 원문을 확인하세요. "일반 관계"(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.</p>
+      <p>Red Hat, OpenShift는 Red Hat, Inc.의 상표이며 소프트웨어를 식별하기 위해서만 이름을 사용합니다. 글꼴은 IBM Plex(SIL OFL 1.1)입니다.</p>
+      <p class="note"><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener noreferrer">저장소 · LICENSE · NOTICE ${ic('external', 12)}</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>
+      <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+      <p style="margin:0 0 8px"><b>저장된 설정</b>: 즐겨찾기, 최근 본 API, 테마, 기준 버전, 시뮬레이터 초안이 이 브라우저에만 저장됩니다(서버로 전송되지 않음).</p>
+      <button class="btn ghost" id="clrstore">${ic('trash', 14)} 저장된 설정 모두 지우기</button></div>`;
+    h.hidden = false; $('#helpx').focus();
+    h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) closeHelp(); };
+    h.onkeydown = e => { if (e.key === 'Tab') { e.preventDefault(); const f = [$('#helpx'), $('#clrstore')]; f[(f.indexOf(document.activeElement) + 1) % 2].focus(); } };
+    $('#clrstore').addEventListener('click', () => {
+      try { Object.keys(localStorage).filter(k => k.startsWith('apibook')).forEach(k => localStorage.removeItem(k)); } catch (e) { /* 저장소 접근 불가 */ }
+      App.renderSide(); App.toast('저장된 설정을 지웠습니다', 'check');
+    });
+  };
 })();

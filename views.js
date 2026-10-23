@@ -59,6 +59,8 @@
           <p class="note" style="padding:0 14px 12px;margin:0">${ds.A.length ? `<b>추가</b> ${esc(names(ds.A, 4))}<br>` : ''}${ds.R.length ? `<b>삭제</b> ${esc(names(ds.R, 4))}` : ''}</p></div>
       </div>`);
     $('#hs').addEventListener('click', () => App.openPalette && App.openPalette());
+    $('#main .page').insertAdjacentHTML('beforeend', '<p class="foot note" style="margin-top:34px">비공식 프로젝트입니다. Red Hat, Inc.와 제휴·보증 관계가 없으며 API 내용은 Red Hat OpenShift 문서(Apache-2.0)에서 수집했습니다. <a href="#" id="aboutlink2">정보 · 고지</a></p>');
+    $('#aboutlink2').addEventListener('click', e => { e.preventDefault(); App.showAbout(); });
   };
 
   /* ====================== 탐색 ====================== */
@@ -124,6 +126,11 @@
     App.$$('select[data-f]').forEach(s => s.addEventListener('change', () => { st[s.dataset.f] = s.value; later(); }));
     $('#fclr').addEventListener('click', () => { st.cat = st.sc = st.st = st.cn = ''; App.$$('select[data-f]').forEach(s => { if (s.dataset.f !== 'sort') s.value = ''; }); later(); });
     $('#bm').addEventListener('click', e => { if (e.target.closest('#more')) { limit += 120; apply(); } });
+    $('#bl').addEventListener('keydown', e => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const rows = App.$$('#bl .row'), i = rows.indexOf(document.activeElement); if (i < 0) return;
+      e.preventDefault(); const nx = rows[i + (e.key === 'ArrowDown' ? 1 : -1)]; if (nx) nx.focus(); else if (e.key === 'ArrowUp') $('#bq').focus();
+    });
     apply(); if (!st.q) $('#bq').focus({ preventScroll: true });
   };
 
@@ -182,11 +189,11 @@
     const tierBy = L.filter(v => m.tier && m.tier[v]).map(v => `${v}: 레벨 ${m.tier[v]}`);
     const items = (type) => m.cons.filter(c => c.t === type);
     const itemHTML = c => `<div class="citem"><code${c.ps && c.ps.length > 1 ? ` title="${esc(c.ps.join(', '))}"` : ''}>${esc(c.p || 'API 전체')}</code>${c.n > 1 ? `<span class="morep">외 ${c.n - 1}곳</span>` : ''}${esc(c.x)}${c.v.length < m.vers.length ? `<span class="vs">${c.v.map(v => `<span class="vp">${v}</span>`).join('')}</span>` : ''}</div>`;
-    const grp = (cls, icon, title, right, body, open) => `<details class="cgroup"${open ? ' open' : ''}><summary><span class="ci ${cls}">${ic(icon, 15)}</span><span>${title}</span><span class="ct">${right || ''}${ic('chevron-right', 14, 'chev')}</span></summary>${body}</details>`;
+    const grp = (cls, icon, title, right, body, open) => `<details class="cgroup ${cls}"${open ? ' open' : ''}><summary><span class="ci ${cls}">${ic(icon, 15)}</span><span>${title}</span><span class="ct">${right || ''}${ic('chevron-right', 14, 'chev')}</span></summary>${body}</details>`;
     let h = grp(at ? 'warn' : 'ok', 'layers', '제공 버전', at ? `<span class="badge beta">${esc(at)}</span>` : `<span class="badge ga">전 버전 제공</span>`,
       `<p class="csum">${at ? `제공 범위: <b>${esc(at)}</b>. 선택한 버전에 없으면 가장 최신 제공 버전의 내용을 보여 줍니다.` : `조사한 ${VL.length}개 버전(${VL.join(', ')}) 모두에서 제공됩니다.`}</p><div class="citems"><div class="vrow" style="margin:0">${L.map(v => `<span class="vchip${m.vers.includes(v) ? '' : ' off'}">${v} ${m.vers.includes(v) ? esc(m.gv[v]) : '없음'}</span>`).join('')}</div>${gvChanged ? `<div class="citem">API 버전이 릴리스마다 바뀌었습니다: ${esc(gvs.join(' → '))}. 이전 버전용 매니페스트는 <code>apiVersion</code>을 확인하세요.</div>` : ''}</div>`, true);
     h += grp(stab === 'ga' ? 'ok' : stab === 'beta' ? 'warn' : 'bad', 'shield', '안정성 · 호환성', `<span class="badge ${stab}">${App.STAB[stab][0]}</span>`,
-      `<p class="csum"><b>${esc(m.gv[dv])}</b> — ${esc(App.STAB[stab][1])}.</p>${tiers.length ? `<div class="citems">${tiers.map(t => `<div class="citem"><code>호환성 레벨 ${t}</code>${esc(App.TIER[t])}${tierBy.length > 1 && tiers.length === 1 ? '' : ''}</div>`).join('')}${tiers.length > 1 ? `<div class="citem">버전별: ${esc(tierBy.join(' · '))}</div>` : ''}</div>` : '<p class="csum">원문에 호환성 레벨 표기가 없습니다.</p>'}`, stab !== 'ga' || tiers.some(t => t >= 3));
+      `<p class="csum"><b>${esc(m.gv[dv])}</b> — ${esc(App.STAB[stab][1])}.</p>${tiers.length ? `<div class="citems">${tiers.map(t => `<div class="citem"><code>호환성 레벨 ${t}</code>${esc(App.TIER[t])}</div>`).join('')}${tiers.length > 1 ? `<div class="citem">버전별: ${esc(tierBy.join(' · '))}</div>` : ''}</div>` : '<p class="csum">원문에 호환성 레벨 표기가 없습니다.</p>'}`, stab !== 'ga' || tiers.some(t => t >= 3));
     h += grp('mute', 'box', '범위', `<span class="badge">${m.ns === true ? '네임스페이스' : m.ns === false ? '클러스터' : '정보 없음'}</span>`, `<p class="csum">${m.ns === true ? '네임스페이스 범위 리소스입니다. <code>metadata.namespace</code>가 필요하며 생략하면 현재 프로젝트에 만들어집니다.' : m.ns === false ? '클러스터 범위 리소스입니다. 네임스페이스 없이 전역으로 존재하며 <code>namespace</code>는 무시됩니다.' : '원문 엔드포인트 정보로는 범위를 판단할 수 없습니다.'}</p>`);
     for (const [t, title, icon, cls, desc] of CONS_GROUPS) {
       const list = items(t); if (!list.length) continue;
@@ -196,9 +203,9 @@
     if (m.vers.length > 1 && (nf || nt || nr || ne)) {
       const vsp = vs => `<span class="vs">${vs.map(v => `<span class="vp">${v}</span>`).join('')}</span>`;
       h += grp('info', 'compare', '버전별 차이', `<span>필드 ${nf} · 타입 ${nt} · 필수 ${nr} · 엔드포인트 ${ne}</span>`,
-        `<div class="citems">${nf ? `<div class="citem"><b>일부 버전에만 있는 필드</b></div>${m.fdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${vsp(e.v)}</div>`).join('')}` : ''}
+        `<div class="citems">${nf ? `<div class="citem"><b>일부 버전에만 있는 필드</b></div>${m.fdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${e.sub ? `<span class="morep">하위 ${e.sub}개 포함</span>` : ''}${vsp(e.v)}</div>`).join('')}` : ''}
         ${nt ? `<div class="citem"><b>버전마다 타입이 다른 필드</b></div>${m.tdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${Object.entries(e.t).map(([v, t]) => `<span class="vp">${v}</span> ${esc(t)}`).join(' · ')}</div>`).join('')}` : ''}
-        ${nr ? `<div class="citem"><b>필수 여부가 다른 필드 (필수인 버전)</b></div>${m.rdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${vsp(e.v)}</div>`).join('')}` : ''}
+        ${nr ? `<div class="citem"><b>필수 여부가 다른 필드 (필수인 버전)</b></div>${m.rdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${e.sub ? `<span class="morep">하위 ${e.sub}개 포함</span>` : ''}${vsp(e.v)}</div>`).join('')}` : ''}
         ${ne ? `<div class="citem"><b>일부 버전에만 있는 엔드포인트</b></div>${m.ediff.map(e => `<div class="citem"><code>${esc(e.e)}</code>${vsp(e.v)}</div>`).join('')}` : ''}${m.trunc ? '<div class="note">항목이 많아 일부만 표시합니다.</div>' : ''}</div>`, false);
     }
     const n = m.cons.length;
@@ -282,8 +289,8 @@
     // 중첩 필드(큰 파일)는 뒤늦게, 관계도는 화면에 들어올 때
     let dead = false, live = null;
     const consBy = new Map(); m.cons.forEach(c => { if (['dep', 'prev', 'imm'].includes(c.t)) (c.ps && c.ps.length ? c.ps : (c.p ? [c.p] : [])).forEach(p => { if (!consBy.has(p)) consBy.set(p, []); consBy.get(p).push(c); }); });
-    const loadF = () => App.getFields(dv).then(FA => {
-      if (dead) return; const F = FA[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
+    const loadF = () => App.ensureFields(dv, a.id).then(() => {
+      if (dead) return; const F = App.fields(dv)[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
       tabsC[0][1] = yamlFull(d, F); if (ct === 0 && $('#codeb')) setCode(0);
     }).catch(() => { const fh = $('#fieldhost'); if (!fh) return; fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드 데이터를 불러오지 못했습니다.</p><button class="btn ghost sm" id="fretry">다시 시도</button></div>'; $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); }); });
     loadF();
@@ -358,7 +365,7 @@
     if (my !== App.activeSeq) return;
     let want = id; const key = id && (U.idKey.get(ver + '|' + id) || (VL.map(v => U.idKey.get(v + '|' + id)).find(Boolean)));
     if (key) { const m = MG.apis[key]; want = m.id[ver] || ''; if (!want) App.toast(`${ver}에는 ${m.kind}가 없어 다른 리소스로 시작합니다`, 'info'); }
-    const ctx = { E: eng.E, G: eng.G, CAT, esc, ver, VER: { list: VL }, db: eng.db, go: App.nav, hash: App.href, getFields: () => App.getFields(ver), docOf: i => eng.E.docs.find(d => d.a.id === i), short: App.short, firstSent: App.firstSent };
+    const ctx = { E: eng.E, G: eng.G, CAT, esc, ver, VER: { list: VL }, db: eng.db, go: App.nav, hash: App.href, ensureFields: i => App.ensureFields(ver, i), fields: () => App.fields(ver), docOf: i => eng.E.docs.find(d => d.a.id === i), short: App.short, firstSent: App.firstSent };
     const host = $('#simhost'); if (!host) return; host.innerHTML = '';
     const live = Sim.mount(host, ctx, want || '');
     return () => live && live.destroy && live.destroy();

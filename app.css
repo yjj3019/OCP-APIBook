@@ -14,7 +14,7 @@
   --shadow-2:0 6px 16px -4px rgba(15,23,42,.10),0 2px 5px -2px rgba(15,23,42,.07);
   --shadow-3:0 24px 60px -16px rgba(15,23,42,.35),0 6px 16px -6px rgba(15,23,42,.18);
   --r-sm:6px; --r:10px; --r-lg:14px;
-  --sans:"IBM Plex Sans KR","Pretendard","Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --sans:"IBM Plex Sans","Pretendard","Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
   --mono:"IBM Plex Mono","JetBrains Mono",Consolas,"SFMono-Regular","Courier New",monospace;
   --panel:var(--surface); --code-ink2:#aeb9cc; --side-w:264px; --top-h:56px;
   color-scheme:light;
@@ -421,3 +421,17 @@ table{border-collapse:collapse}
   .navitem,.sideitem{min-height:40px}
   .tabs button,.sticky-tabs .tabs a{min-height:40px}
 }
+
+/* ---------- 확인 문제 수정: 위험도 구분, 스크롤 힌트, 고지 ---------- */
+.cgroup{border-left:3px solid transparent}
+.cgroup.bad{border-left-color:var(--bad)}
+.cgroup.warn{border-left-color:var(--warn)}
+.cgroup.info{border-left-color:var(--accent)}
+.cgroup.bad>summary .ct,.cgroup.warn>summary .ct{font-weight:600}
+.cgroup.bad>summary .ct{color:var(--bad)}
+.cgroup.warn>summary .ct{color:var(--warn)}
+.tchips.cats{-webkit-mask-image:linear-gradient(90deg,#000 94%,transparent);mask-image:linear-gradient(90deg,#000 94%,transparent)}
+.foot a{color:var(--accent-ink)}
+.helpbox p{margin:10px 0}
+.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (pointer:coarse){.fchip{height:38px}.fchip select{min-height:34px}}

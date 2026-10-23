@@ -72,6 +72,7 @@ async (page) => {
       const rq = rm ? rm[1].split('\n').map(s => s.trim()).filter(s => s && s !== 'Expand') : [];
       return { desc, ty, rq };
     };
+    // 텍스트 상한(상향됨): 최상위 설명 20000, 경로 설명 12000, 표 행 설명 20000, 최상위 필드 설명 20000. 이전 상한(8000/3000/4000/4000)에 걸려 잘린 원본은 build.js 가 표시함
     const rowsOf = (tbl, dmax) => tbl ? [...tbl.querySelectorAll('tbody tr')].map(tr => { const c = [...tr.children].map(cell); return [c[0], c[1] || '', (c[2] || '').slice(0, dmax)]; }).filter(r => r[0]) : [];
 
     for (const id of ids) {
@@ -81,21 +82,21 @@ async (page) => {
       const txt = nb(sec.innerText).replace(/\r/g, '');
       const after = txt.slice(txt.indexOf('\n') + 1);
       const top = parseHead(after.split(/\n\d+\.\d+\.\s+Specification/)[0]);
-      const out = { desc: top.desc.slice(0, 8000), type: top.ty, required: top.rq };
+      const out = { desc: top.desc.slice(0, 20000), type: top.ty, required: top.rq };
       const specH = [...sec.querySelectorAll('h3')].find(h => /Specification/i.test(h.innerText));
       const epH = [...sec.querySelectorAll('h3')].find(h => /API endpoints/i.test(h.innerText));
       out.props = []; out.fields = [];
       if (specH) {
         const ss = specH.closest('section');
         const heads = [...ss.querySelectorAll('h4,h5,h6')].filter(h => !epH || !epH.closest('section').contains(h));
-        out.props = rowsOf(ss.querySelector('table'), 4000).map(r => ({ n: r[0], t: r[1], d: r[2] }));
+        out.props = rowsOf(ss.querySelector("table"), 20000).map(r => ({ n: r[0], t: r[1], d: r[2] }));
         for (const h of heads) {
           const path = nb(h.innerText).trim().replace(/^[\d.]+\s*/, '');
           const t = bodyText(h, 'h4,h5,h6');
           const meta = parseHead(t.split(/\nProperty\s/)[0]);
           let w = h; const sc = h.closest('section'); while (w.parentElement && w.parentElement !== sc) w = w.parentElement;
           let tbl = null; for (let n = w.nextElementSibling; n; n = n.nextElementSibling) { if (n.matches('h4,h5,h6') || n.querySelector('h4,h5,h6')) break; const q = n.matches('table') ? n : n.querySelector('table'); if (q) { tbl = q; break; } }
-          out.fields.push({ p: path, t: meta.ty, q: meta.rq, d: meta.desc.slice(0, 3000), r: rowsOf(tbl, 4000) });
+          out.fields.push({ p: path, t: meta.ty, q: meta.rq, d: meta.desc.slice(0, 12000), r: rowsOf(tbl, 20000) });
         }
       }
       out.eps = [];

@@ -109,7 +109,7 @@
         bounds: nameToks.reduce((o, t) => (o.set.add(o.n), o.n += t.length, o), { set: new Set(), n: 0 }).set,   // 이름 안 단어 시작 위치
         gv: (a.group ? a.group + '/' : '') + a.version,
         ns: d.eps.some(e => e.p.includes('{namespace}')),
-        sents: [{ t: desc, src: '설명' }].concat(sentences(desc).map(t => ({ t, src: '설명' })), d.props.map(p => ({ t: p.n + ' — ' + p.d, src: '필드' })), (a.fp || []).filter(p => p.includes('.')).slice(0, 800).map(p => ({ t: p, src: '필드 경로' }))).map(x => (x.l = x.t.toLowerCase(), x)),
+        get sents() { return this._s || (this._s = [{ t: desc, src: '설명' }].concat(sentences(desc).map(t => ({ t, src: '설명' })), d.props.map(p => ({ t: p.n + ' — ' + p.d, src: '필드' })), (a.fp || []).filter(p => p.includes('.')).slice(0, 800).map(p => ({ t: p, src: '필드 경로' }))).map(x => (x.l = x.t.toLowerCase(), x))); },   // 스니펫을 처음 쓸 때만 계산(메모리·생성 시간 절감)
       };
     });
     // 문서 빈도(IDF)
@@ -121,8 +121,6 @@
     }
     const N = docs.length;
     const idf = t => 0.45 + 0.55 * Math.max(0, Math.log(N / ((df.get(t) || 0) + 1))) / Math.log(N);
-    const vocab = []; // "혹시 이것?" 용 이름 목록
-    docs.forEach(d => vocab.push(d));
 
     const guide = BOOK.guide.map(s => {
       const text = s.html.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ');
@@ -170,7 +168,7 @@
           }
         }
       }
-      r = { m, mf }; mcache.set(term, r); return r;
+      r = { m, mf }; if (mcache.size > 4000) mcache.clear(); mcache.set(term, r); return r;
     }
     // 한 검색어(동의어 포함)에 대해 문서별 최고 점수
     function termScores(term) {
@@ -194,7 +192,7 @@
     stats.buildMs = (typeof performance !== 'undefined' ? performance : Date).now() - tIdx0;
 
     function parse(q) {
-      const raw = q.trim();
+      const raw = String(q).trim().slice(0, 300);   // 병적으로 긴 입력 방어
       const joined = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
       const joinedS = stem(joined);
       const toks = [];
@@ -203,13 +201,14 @@
         if (hasKo(w)) { toks.push(w.toLowerCase()); continue; }
         for (const x of words(w)) toks.push(x);
       }
+      toks.splice(16);   // 검색어는 앞 16단어까지만
       const terms = [];
       for (const t of [...new Set(toks)]) {
         if (STOP.has(t)) continue;
         const alts = [];
         if (hasKo(t)) {
           let hit = false;
-          for (const k of (KO[t] ? [t] : KO_KEYS)) if (t.includes(k) || (t.length >= 2 && k.startsWith(t))) { KO[k].forEach(e => alts.push({ t: e, w: 0.8 })); hit = true; break; }
+          for (const k of (KO[t] ? [t] : KO_KEYS)) if ((k.length >= 2 ? t.includes(k) : t === k) || (t.length >= 2 && k.startsWith(t))) { KO[k].forEach(e => alts.push({ t: e, w: 0.8 })); hit = true; break; }
           if (!hit) { const g = t.replace(/[가-힣]+/g, ''); if (!g) continue; alts.push({ t: g, w: 1 }); }
           if (!alts.length) continue;
         } else {
@@ -247,11 +246,11 @@
 
     function search(q, opt) {
       opt = opt || {};
-      const key = q.trim() + '|' + (opt.cat || '');
+      const key = String(q).trim().slice(0, 300).toLowerCase() + '|' + (opt.cat || '');
       const hit = rcache.get(key); if (hit) return hit;
       const P = parse(q);
       const inCat = d => !opt.cat || d.a.book === opt.cat;
-      if (!P.terms.length && !P.joined) return { apis: docs.filter(inCat).map(d => ({ d, score: 0 })), guide: [], P, relaxed: false };
+      if (!P.terms.length && !P.joined) return P.raw ? { apis: [], guide: [], P, relaxed: false } : { apis: docs.filter(inCat).map(d => ({ d, score: 0 })), guide: [], P, relaxed: false };   // 알 수 없는 단어만 있으면 전체가 아니라 빈 결과
 
       const per = P.terms.map(termScores);
       const rl = P.raw.toLowerCase();

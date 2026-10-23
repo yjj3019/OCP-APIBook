@@ -125,11 +125,11 @@
     }
     function map(indent, dep) {
       if (dep > MAX_DEPTH) throw new Error(`줄 ${L[i].n}: 중첩이 너무 깊습니다 (최대 ${MAX_DEPTH}단계)`);
-      const o = {};
+      const o = {}; let prevPlain = false;
       for (;;) {
         skip(); if (i >= L.length) break; const ln = L[i];
         if (ln.indent < indent) break;
-        if (ln.indent > indent) throw new Error(`줄 ${ln.n}: 들여쓰기가 맞지 않습니다`);
+        if (ln.indent > indent) throw new Error(prevPlain ? `줄 ${ln.n}: 여러 줄 평문 스칼라는 지원하지 않습니다. 값을 한 줄로 쓰거나 "|"(줄 유지) 또는 ">"(줄 접기) 블록 스칼라를 쓰세요` : `줄 ${ln.n}: 들여쓰기가 맞지 않습니다`);
         if (isSeq(ln.text)) break;
         const ks = KS(ln); if (!ks) throw new Error(`줄 ${ln.n}: 'key: value' 형식이 아닙니다 → ${clip(ln.text)}`);
         const [k, rest] = ks; i++;
@@ -138,6 +138,7 @@
         if (rest === '') { skip(); const nx = L[i]; o[k] = nx && (nx.indent > indent || (nx.indent === indent && isSeq(nx.text))) ? node(nx.indent, dep + 1) : null; }
         else if (BLOCK_RE.test(rest)) o[k] = block(rest, indent, ln);
         else o[k] = wrap(ln.n, () => scalar(rest, 0));
+        prevPlain = rest !== '' && !BLOCK_RE.test(rest);
       }
       return o;
     }
@@ -578,17 +579,24 @@
     const esc = C.esc, ver = C.ver;
     const store = { items: [], active: 0 };
     try { const s = restoreStore(localStorage.getItem(LSKEY + ver), C.docOf); store.items = s.items; store.active = s.active; } catch (e) { /* 저장소 접근 불가/손상: 빈 상태로 시작 */ }
-    let F = null, dead = false, tab = 'yaml';
-    const schemas = new Map();
+    let dead = false, tab = 'yaml', busy = false;
+    const schemas = new Map(), loaded = new Set();   // loaded: ensureFields 가 끝난 id (그 전에는 스키마를 캐시하지 않음)
     const save = () => { try { localStorage.setItem(LSKEY + ver, JSON.stringify({ items: store.items.map(i => ({ id: i.id, M: i.M, opt: i.opt })), active: store.active })); } catch (e) {} };
     const item = () => store.items[store.active];
     const docOf = id => C.docOf(id);
-    const schemaOf = id => { if (!schemas.has(id)) schemas.set(id, makeSchema(docOf(id).a, (F && F[id]) || [])); return schemas.get(id); };
+    const schemaOf = id => {
+      if (schemas.has(id)) return schemas.get(id);
+      const s = makeSchema(docOf(id).a, (C.fields() || {})[id] || []);   // 항상 C.fields() 의 현재 객체를 읽는다
+      if (loaded.has(id)) schemas.set(id, s);
+      return s;
+    };
+    const ensure = id => Promise.resolve(C.ensureFields(id)).then(() => { loaded.add(id); });
 
     host.innerHTML = `<div class="sim">
       <h2 class="d-title" style="font-family:var(--sans);font-size:22px">API 설계 시뮬레이터 <span class="gv">${esc(ver)}</span></h2>
       <p class="note" style="margin:0 0 10px">리소스를 설계하면 YAML이 만들어지고, 스펙(필수 값·타입·알 수 없는 필드)으로 검증합니다. 요청을 보냈을 때 서버가 어떻게 응답할지도 가상으로 확인합니다. 실제 클러스터에는 아무것도 전송하지 않습니다.</p>
       <div class="rtabs" id="rtabs"></div>
+      <div class="note" id="loaderr" role="status" style="margin:0 0 6px;min-height:0" hidden></div>
       <div class="addres"><input class="tfind" id="addq" placeholder="＋ 리소스 추가 (예: route, service, networkpolicy)" autocomplete="off" aria-label="리소스 추가"><div class="addlist" id="addlist" hidden></div></div>
       <div class="related" id="related"></div>
       <div class="simgrid"><section class="simform" id="sform"><p class="note">스키마를 불러오는 중…</p></section>
@@ -603,11 +611,25 @@
       ensureRequired(M, [], '', schemaOf(id), 0);
       return it;
     }
-    function addItem(id, quiet) {
+    function addItem(id, quiet) {   // 필드 파일이 이미 로드된 id 만 호출할 것
+      if (!loaded.has(id)) return;
       if (!docOf(id)) return;
       const ex = store.items.findIndex(i => i.id === id);
       if (ex >= 0) store.active = ex; else { store.items.push(newItem(id)); store.active = store.items.length - 1; }
       save(); if (!quiet) { renderTabs(); renderForm(); renderOut(); }
+    }
+    function setBusy(b, msg) {
+      busy = b; const le = $('#loaderr'); le.style.color = ''; le.hidden = !msg; le.textContent = msg || '';
+      aq.disabled = b; host.querySelectorAll('#related .chip, #addlist .ai').forEach(x => { x.disabled = b; });
+    }
+    async function addItemAsync(id) {   // 필드 로드 후에 추가. 실패하면 폼 위쪽에 오류 한 줄
+      if (busy || !docOf(id) || dead) return;
+      if (!loaded.has(id)) {
+        setBusy(true, '불러오는 중…');
+        try { await ensure(id); } catch (e) { if (dead) return; setBusy(false); const le = $('#loaderr'); le.hidden = false; le.style.color = 'var(--bad)'; le.textContent = '스키마 데이터를 불러오지 못했습니다: ' + (e && e.message || e); return; }
+        if (dead) return; setBusy(false);
+      }
+      addItem(id);
     }
     function renderTabs() {
       if (item()) { try { history.replaceState(null, '', C.hash('sim:' + item().id)); } catch (e) {} }
@@ -624,14 +646,14 @@
       if (item() && C.G && C.G.adj.has(item().id)) {
         const seen = new Set(store.items.map(i => i.id)), ids = [];
         for (const e of C.G.adj.get(item().id)) { if (e.type === 'same' || e.type === 'variant') continue; const o = e.s === item().id ? e.t : e.s; if (!seen.has(o) && !ids.includes(o)) ids.push(o); }
-        if (ids.length) { rel.appendChild(el('span', { class: 'note', text: '연결된 API 추가:' })); ids.slice(0, 8).forEach(o => rel.appendChild(el('button', { class: 'chip', text: '+ ' + C.G.byId.get(o).kind, onclick: () => addItem(o) }))); }
+        if (ids.length) { rel.appendChild(el('span', { class: 'note', text: '연결된 API 추가:' })); ids.slice(0, 8).forEach(o => rel.appendChild(el('button', { class: 'chip', text: '+ ' + C.G.byId.get(o).kind, onclick: () => addItemAsync(o) }))); }
       }
     }
     const aq = $('#addq'), al = $('#addlist');
     aq.addEventListener('input', () => {
       const q = aq.value.trim(); al.innerHTML = ''; if (!q) { al.hidden = true; return; }
       const r = C.E.search(q).apis.slice(0, 8); al.hidden = !r.length;
-      r.forEach(x => al.appendChild(el('button', { class: 'ai', onclick: () => { aq.value = ''; al.hidden = true; addItem(x.d.a.id); } }, [el('b', { text: x.d.a.kind }), el('span', { class: 'gv', text: ' ' + x.d.gv })])));
+      r.forEach(x => al.appendChild(el('button', { class: 'ai', onclick: () => { aq.value = ''; al.hidden = true; addItemAsync(x.d.a.id); } }, [el('b', { text: x.d.a.kind }), el('span', { class: 'gv', text: ' ' + x.d.gv })])));
     });
     aq.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = al.querySelector('.ai'); if (b) b.click(); } else if (e.key === 'Escape') { al.hidden = true; } });
 
@@ -752,14 +774,15 @@
 
     /* ---- YAML 가져오기 ---- */
     function toggleImport() { const i = $('#imp'); i.hidden = !i.hidden; }
-    function doImport() {
+    async function doImport() {
+      if (busy) return;
       const it = item(), d = docOf(it.id), err = $('#imperr'); err.textContent = '';
       try {
         const docs = yamlParse($('#imptxt').value).filter(isObj); if (!docs.length) throw new Error('가져올 내용이 없습니다');
         const hit = docs.find(x => x.kind === d.a.kind) || docs[0];
-        if (hit.kind && hit.kind !== d.a.kind) { const o = C.E.docs.find(x => x.a.kind === hit.kind && (!hit.apiVersion || x.gv === hit.apiVersion)); if (o) { addItem(o.a.id, true); item().M = hit; save(); renderTabs(); renderForm(); renderOut(); return; } throw new Error(`kind가 ${hit.kind} 입니다. 이 버전에서 해당 API를 찾지 못했습니다`); }
+        if (hit.kind && hit.kind !== d.a.kind) { const o = C.E.docs.find(x => x.a.kind === hit.kind && (!hit.apiVersion || x.gv === hit.apiVersion)); if (o) { setBusy(true, '불러오는 중…'); try { await ensure(o.a.id); } finally { if (!dead) setBusy(false); } if (dead) return; addItem(o.a.id, true); item().M = hit; save(); renderTabs(); renderForm(); renderOut(); return; } throw new Error(`kind가 ${hit.kind} 입니다. 이 버전에서 해당 API를 찾지 못했습니다`); }
         it.M = hit; save(); renderForm(); renderOut();
-      } catch (e) { err.textContent = 'YAML 오류: ' + e.message; }
+      } catch (e) { if (!dead) err.textContent = 'YAML 오류: ' + e.message; }
     }
 
     /* ---- 출력 ---- */
@@ -822,15 +845,29 @@
     host.querySelector('#otabs').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) { tab = b.dataset.t; renderOut(); } });
 
     /* ---- 시작 ---- */
-    C.getFields().then(fa => {
-      if (dead) return; F = fa;
-      if (apiId) addItem(apiId, true);
-      if (!store.items.length) { const first = C.docOf('route-route-openshift-io-v1') ? 'route-route-openshift-io-v1' : C.E.docs[0].a.id; addItem(first, true); }
-      renderTabs(); renderForm(); renderOut();
-    }).catch(e => { $('#sform').innerHTML = '<div class="empty">스키마 데이터를 불러오지 못했습니다: ' + esc(e.message) + '</div>'; });
+    async function start() {
+      const first = C.docOf('route-route-openshift-io-v1') ? 'route-route-openshift-io-v1' : C.E.docs[0].a.id;
+      const ids = [...new Set([apiId, ...store.items.map(i => i.id), (!apiId && !store.items.length) ? first : null].filter(id => id && docOf(id)))];
+      try { await Promise.all(ids.map(ensure)); }
+      catch (e) {
+        if (dead) return;
+        const f = $('#sform'); f.innerHTML = '<div class="empty">스키마 데이터를 불러오지 못했습니다: ' + esc((e && e.message) || String(e)) + '<p><button class="btn" id="retry">다시 시도</button></p></div>';
+        f.querySelector('#retry').addEventListener('click', () => { f.innerHTML = '<p class="note">스키마를 불러오는 중…</p>'; start(); });
+        return;
+      }
+      if (dead) return;
+      try {
+        if (apiId) addItem(apiId, true);
+        if (!store.items.length) addItem(first, true);
+        renderTabs(); renderForm(); renderOut();
+      } catch (e) { $('#sform').innerHTML = '<div class="empty">시뮬레이터를 표시하지 못했습니다: ' + esc(e.message) + '</div>'; }
+    }
+    start();
     return { destroy() { dead = true; } };
   }
 
+  /* 공개 API: mount, yamlParse, yamlDump, validate, makeSchema, simulate (opsOf 는 보조).
+     _t 는 Node 테스트 전용 내부 함수 모음이며 공개 API 가 아니다 — 언제든 바뀌거나 사라질 수 있으니 화면 코드에서 쓰지 말 것. */
   root.Sim = { mount, yamlParse, yamlDump, validate, makeSchema, simulate, opsOf, _t: { ensureRequired, sampleFill, setAt, getAt, delAt, hasAt, mergePatch, resNames, curl, ocCmd, sq, defaultFor, ordered, restoreStore, closeTab, cleanOpt, normT } };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Sim;
 })(typeof window !== 'undefined' ? window : globalThis);
