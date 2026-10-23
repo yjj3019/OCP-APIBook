@@ -27,6 +27,7 @@ const BAD_BY = {
   excl: /When multiple Listeners share values|implementation MUST accept exactly one of/i,
   cond: /Possible enum values:|^This the default behavior\. - "|Only valid in Prometheus versions? [\d.]+ and newer|ignored if the cloud-provider does not support|^This field is ignored if not specified\.?$|Wildcards are only supported for|Conditions are only valid for the current|in parallel only when|only applied to cleartext|could be safely pulled only when|only allowed if at most|is set only when this pod preempts|is not applicable for|External topology mode is not applicable/i,
 };
+const RETYPE = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'cons-retype.json'), 'utf8')); } catch (e) { return {}; } })();   // {문장: 새 유형}
 const DENY = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, 'cons-deny.json'), 'utf8')));   // 남은 개별 오탐 문장(감사 기록)
 const EXTRA = {
   dep: (s) => !(/obsolete/i.test(s) && !/deprecat/i.test(s)),
@@ -42,7 +43,13 @@ const PAT2 = {
   cond: /\b(may|can) only be (set|specified|used) (when|if)\b|\bonly be specified when\b/i,
   limit: /\b(is|are) limited to (a maximum (length )?of )?\d+ (characters|bytes|entries|items)\b|\blimited to \d+ characters\b/i,
 };
-const PAT2_BAD = /\bMUST\b|\bSHOULD\b|\bMAY\b|\bREQUIRED\b/;
+// 3차 재현율 보강(넓은 패턴). 새로 잡힌 문장은 전수 판정 후 오탐은 cons-deny.json, 유형 오류는 cons-retype.json 으로 바로잡는다.
+const PAT3 = {
+  excl: /\bcannot be (set|specified|used|combined) (with|alongside|in combination with|together with|if|when)\b|\bmust not be (set|specified) (when|if) [^.]{0,60}\b(is|are) (set|specified)\b|\bbut not both\b|\bnot both\b|\bonly one (\w+ )?(may|can|must) be (set|specified)\b|\bmay not be (combined|used together)\b|\bexactly one (\w+ )?(must|should) be\b/i,
+  cond: /\brequired (if|when|unless)\b|\bmust (not )?be (set|specified|empty|omitted|unset|provided) (when|if|unless)\b|\bonly (be )?(set|used|honou?red|respected|applied|allowed|permitted|supported) (when|if)\b|\bis ignored (when|if|unless)\b|\bmust be omitted\b|\bwhen [^,.]{1,60} is (set|specified|true|false|enabled)[^.]{0,40}\bmust\b/i,
+  limit: /\bmust (not )?(be|contain|start|end|begin|consist|conform|exceed|match|include)\b|\bmust be (unique|lowercase|non-empty|a multiple of|a power of|in the range|in range|at least|at most|less than|greater than|no (more|longer|shorter) than)\b|\bcannot (be empty|exceed|contain|start|end)\b|\b(may|can) not (exceed|contain|start|end)\b|\b(valid|allowed|supported|accepted) (values|options|formats?) (are|is|include)\b|\bcan be one of\b|\b(is|are) one of\b|\bmax(imum)? (length|size|value|number) (is|of)\b|\bmin(imum)? (length|size|value|number) (is|of)\b|\b\d+ characters\b|\bin the range\b/i,
+};
+const PAT2_BAD =/\bMUST\b|\bSHOULD\b|\bMAY\b|\bREQUIRED\b/;
 const PRIO = ['dep', 'prev', 'imm', 'single', 'excl', 'cond', 'limit'];
 // 재분류: [정규식, 원래 유형(null = 어느 PAT 에도 남지 않음), 새 유형]. 감사에서 "참 제약이지만 유형이 틀림"으로 판정된 문장 계열.
 // 교차 필드 비교("must be greater than <다른 필드>", "Start < End")는 값 제약이므로 limit 그대로 둔다.
@@ -51,7 +58,7 @@ const RECLASS = [
   [/\breserved and may not be (modified|set|used)\b|\bmay not be used in the middle of\b/i, null, 'limit'],
   [/^(If|When) [^,]{0,60}\b(is present|is Indexed)\b|\bare allowed values when\b|\bis required and must be .{0,60}\bwhen\b/i, 'limit', 'cond'],
 ];
-const CAP = { imm: 15, dep: 40, prev: 20, single: 3, excl: 32, cond: 12, limit: 24 };   // 묶음((유형,문장)) 기준 상한
+const CAP = { imm: 15, dep: 40, prev: 20, single: 3, excl: 48, cond: 24, limit: 48 };   // 묶음((유형,문장)) 기준 상한
 const ALLRX = new RegExp(Object.values(PAT).map(r => r.source).join('|'), 'i');
 const SKIP_PATH = /^(apiVersion|kind|metadata)(\.|$)/;
 const NOISE = /^(Is required when creating resources|APIVersion defines|Kind is a string value|Standard object.?s metadata|metadata is the standard|Servers may infer|Cannot be updated\.?$|In CamelCase|More info:|Compatibility level \d)/i;
@@ -73,9 +80,11 @@ function sentences(text) {
 }
 function classify(s, p, kind) {
   if (DROP_ALL.test(s) || DENY.has(s)) return undefined;
-  const hit = t => PAT[t].test(s) || (PAT2[t] && PAT2[t].test(s) && !PAT2_BAD.test(s) && !/^status(\.|$)/.test(p));   // 보강 패턴은 status(관측값) 아래에서 쓰지 않음
+  const extra = (P, t) => P[t] && P[t].test(s) && !PAT2_BAD.test(s) && !/^status(\.|$)/.test(p);
+  const hit = t => PAT[t].test(s) || extra(PAT2, t) || extra(PAT3, t);   // 보강 패턴은 status(관측값) 아래에서 쓰지 않음
   let t = PRIO.find(t => hit(t) && !(BAD_BY[t] && BAD_BY[t].test(s)) && (!EXTRA[t] || EXTRA[t](s, p, kind)));
   for (const [rx, from, to] of RECLASS) if ((t || null) === from && rx.test(s)) { t = to; break; }
+  if (t && RETYPE[s]) t = RETYPE[s] === '-' ? undefined : RETYPE[s];   // 전수 판정에서 유형이 틀린 개별 문장('-' 는 제외)
   return t;
 }
 function extract(d, kind) {   // 상한 없이 (유형, 경로, 문장) 전부 반환. 상한은 병합 후 묶음 기준으로 적용

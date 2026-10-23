@@ -1,12 +1,12 @@
 /* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = 'be5eb170225e-bf054264b8da';
+const BUILD = 'be5eb170225e-ad369afd4b9b';
 const CACHE = 'api-book-' + BUILD;
 const PRECACHE = [
   "./",
   "app.css?v=be5eb170225e",
   "sim.css?v=be5eb170225e",
   "ui-kit.js?v=be5eb170225e",
-  "data/merged.js?v=ea32cca761d5",
+  "data/merged.js?v=f0d51685b617",
   "data/legacy.js?v=16898af37395",
   "search.js?v=be5eb170225e",
   "core.js?v=be5eb170225e",
@@ -17,8 +17,8 @@ const PRECACHE = [
   "viz.js?v=be5eb170225e",
   "topo.js?v=be5eb170225e",
   "sim.js?v=be5eb170225e",
-  "data/4.22.js?v=bf054264b8da",
-  "data/4.22.fidx.js?v=bf054264b8da"
+  "data/4.22.js?v=ad369afd4b9b",
+  "data/4.22.fidx.js?v=ad369afd4b9b"
 ];
 
 self.addEventListener('install', e => {

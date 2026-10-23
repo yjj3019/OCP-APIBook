@@ -166,7 +166,7 @@ function collapse(list) {
   }
   return out;
 }
-const LIM = { fdiff: 120, tdiff: 60, rdiff: 60, ediff: 40, cons: 120 };
+const LIM = { fdiff: 120, tdiff: 60, rdiff: 60, ediff: 40, cons: 160 };
 const mergedApis = {}, legacy = { apis: [], fidx: {} };
 const allKeys = new Set(vers.flatMap(v => Object.keys(KEEP[v] || {})));
 for (const key of allKeys) {
