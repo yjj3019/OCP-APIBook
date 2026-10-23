@@ -109,7 +109,7 @@ const TOOLS = [
         children = e.r; required = e.q || [];
       }
       const known = new Set(fieldsOf(v, r).map(x => x.p));
-      return { api: `${m.group || 'core'}/${m.kind}`, version: v, path: p || '(최상위)', fields: children.map(([n, t, d]) => {
+      return { api: `${m.group || 'core'}/${m.kind}`, version: v, path: p || '(최상위)', fields: children.filter(c => !c[0].endsWith('[]')).map(([n, t, d]) => {   // 'x[]' 는 배열 항목 표시용 보조 행이라 뺀다
         const sub = (p ? p + '.' : '') + n;
         return { name: n, type: t, required: required.includes(n), description: cut(d, 400), hasChildren: known.has('.' + sub) || known.has('.' + sub + '[]') };
       }) };
