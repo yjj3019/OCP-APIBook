@@ -25,12 +25,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check stamps, syntax and MCP server
+      - name: Check stamps, syntax, data and MCP server
         run: |
           for f in *.js tools/*.js mcp/*.js; do node --check "$f"; done
           node tools/stamp.js
           git diff --exit-code -- index.html sw.js || { echo '::error::?v= 토큰/sw.js 가 최신이 아닙니다. node tools/stamp.js 를 실행해 커밋하세요.'; exit 1; }
           node mcp/smoke.js
+          node tools/test-build.js
       - name: Assemble site (static files only)
         run: |
           mkdir _site

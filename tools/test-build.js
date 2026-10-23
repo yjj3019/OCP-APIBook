@@ -86,8 +86,10 @@ const FLD = {}, bookFiles = {};
   }
   Object.assign(FLD, w.FIELDS || {});
 }
-// (e) _scrape 에서 독립적으로 만든 기대 구조와 비교
-{
+// (e) _scrape 에서 독립적으로 만든 기대 구조와 비교 — 수집 원본이 없는 환경(CI, 새로 받은 저장소)에서는 건너뛴다
+const HAVE_SCRAPE = M.list.every(v => fs.existsSync(path.join(__dirname, '..', '_scrape', `v${v}.json`)));
+if (!HAVE_SCRAPE) console.log('SKIP (e) _scrape 원본이 없어 원본 대조는 건너뜀(데이터 자체 검사는 계속)');
+else {
   const ZW = /[​‌‍﻿]/g, CUT = ' …(원문에서 계속)';
   const z = o => typeof o === 'string' ? o.replace(ZW, '') : Array.isArray(o) ? o.map(z) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, x]) => [z(k), z(x)])) : o;
   let bad = 0, nApi = 0, dup = 0, miss = 0, extra = 0;
