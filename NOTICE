@@ -42,6 +42,10 @@ Changes made to the original content (Apache License 2.0, section 4(b)):
   - Long descriptions and tables were split, normalized and, where noted in the
     build scripts, truncated; markup, navigation and scripts were removed.
   - Search indexes, relationship data and a user interface were added.
+  - The "constraints and limitations" shown for each API are sentences
+    extracted automatically (by pattern matching) from the original descriptions,
+    plus differences computed between the 4.22, 4.21 and 4.20 editions. They are
+    not authoritative; consult the original documentation.
   - The "general relationships" shown in the topology view are NOT part of the
     original documentation. They were compiled separately from general
     knowledge of Kubernetes/OpenShift and are marked as such in the interface.

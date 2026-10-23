@@ -521,7 +521,7 @@
       f.appendChild(bar);
       const imp = el('div', { class: 'import', id: 'imp', hidden: true }, [
         el('textarea', { id: 'imptxt', rows: 8, placeholder: 'YAML 또는 JSON을 붙여 넣으세요. 여러 문서(---)면 이 리소스와 같은 kind만 가져옵니다.', spellcheck: 'false' }),
-        el('div', { class: 'sbar' }, [el('button', { class: 'btn', text: '폼에 적용', onclick: doImport }), el('span', { id: 'imperr', class: 'note', style: 'margin:0;color:var(--accent)' })]),
+        el('div', { class: 'sbar' }, [el('button', { class: 'btn', text: '폼에 적용', onclick: doImport }), el('span', { id: 'imperr', class: 'note', style: 'margin:0;color:var(--bad)' })]),
       ]);
       f.appendChild(imp);
       f.appendChild(el('div', { class: 'sfix' }, [fixed('apiVersion', M.apiVersion), fixed('kind', M.kind)]));

@@ -36,7 +36,7 @@
     '설명': [], '사용법': [], '방법': [], '만들기': [], '생성': [], '조회': [], '삭제': [], '예제': [], '예시': [],
     '스트림': ['stream', 'imagestream'], '이미지스트림': ['imagestream'], '태그': ['tag', 'imagetag'], '풀': ['pull'], '가져오기': ['import'],
     '조직': ['group', 'user'], '계정': ['serviceaccount', 'user'], '서비스계정': ['serviceaccount'], '설정맵': ['configmap'], '네트워크정책': ['networkpolicy'],
-    '가상머신': ['virtualmachine', 'vm'], '쿠버네티스': ['kubernetes'], '오픈시프트': ['openshift'],
+    '가상머신': ['virtualmachine', 'vm'], '폐지': ['deprecated', 'removed'], '폐지예정': ['deprecated', 'removed'], '변경불가': ['immutable', 'cannot', 'changed'], '불변': ['immutable'], '미리보기': ['preview', 'technology'], '기능게이트': ['feature', 'gate'], '제약': ['must', 'cannot', 'only'], '싱글턴': ['singleton', 'cluster'], '상호배타': ['mutually', 'exclusive'], '쿠버네티스': ['kubernetes'], '오픈시프트': ['openshift'],
   };
   const KO_KEYS = Object.keys(KO).sort((a, b) => b.length - a.length);
   // 영문 별칭
@@ -52,7 +52,7 @@
     upgrade: ['clusterversion'], update: ['clusterversion'], scale: ['horizontalpodautoscaler', 'machineset'], log: ['clusterlogging', 'logging'],
   };
   const STOP = new Set(['the', 'a', 'an', 'of', 'to', 'for', 'and', 'or', 'in', 'on', 'is', 'how', 'what', 'api', 'apis', 'use', 'with', 'object', 'objects']);
-  const FW = { name: 10, alias: 7, group: 4, cat: 3, pname: 2.6, fname: 2.2, cname: 3.4, ep: 1.4, desc: 2, pdesc: 0.8 };
+  const FW = { name: 10, alias: 7, group: 4, cat: 3, pname: 2.6, fname: 2.2, cname: 3.4, cons: 1.1, ep: 1.4, desc: 2, pdesc: 0.8 };
 
   const hasKo = s => /[가-힣]/.test(s);
   const camel = s => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2').toLowerCase();
@@ -98,6 +98,7 @@
         pname: addAll(new Set(), d.props.flatMap(p => words(p.n))),
         fname: addAll(new Set(), (a.fp || []).flatMap(p => words(p))),
         cname: new Set([...d.props.map(p => p.n), ...(a.fp || [])].flatMap(segs)),   // 붙여 쓴 필드명(정확 일치 전용)   // 중첩 필드 경로(spec.tls.termination 등)
+        cons: addAll(new Set(), words((a.cons || []).map(c => c.x).join(' '))),   // 제약·제한 사항 문장
         ep: addAll(new Set(), d.eps.flatMap(e => words(e.p))),
         desc: addAll(new Set(), words(desc)),
         pdesc: addAll(new Set(), d.props.flatMap(p => words(p.d))),
