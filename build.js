@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 수집 원본(_scrape/v<버전>.json) -> data/ 아래 버전별 데이터베이스
  *   data/versions.js        버전 목록과 API 가용성/변경 요약(작게 유지)
  *   data/<ver>.js           가이드 + API 목록 + 설명·최상위 필드·엔드포인트

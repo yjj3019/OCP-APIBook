@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 async (page) => {
   const VERS = ['4.22', '4.21', '4.20'];
   const POOL = 6;

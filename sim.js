@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* API 설계 시뮬레이터: 스펙 기반 폼 → YAML → 스키마 검증 → 요청/응답 시뮬레이션 */
 (function (root) {
   'use strict';
@@ -324,7 +325,7 @@
   }
 
   /* ====================== 검증 ====================== */
-  const DNS = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/, DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+  const DNS = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/, DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/, LABEL_KINDS = new Set(['Namespace', 'Project', 'Service', 'ProjectRequest']);
   const empty = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
   function validate(M, a, d, sch) {
     const issues = [];
@@ -337,7 +338,7 @@
       if (empty(md.name) && empty(md.generateName)) add('error', ['metadata', 'name'], '필수 값 없음: name 또는 generateName 중 하나가 필요합니다', 'required');
       else if (!empty(md.name)) {
         if (typeof md.name !== 'string') add('error', ['metadata', 'name'], '문자열이어야 합니다', 'type');
-        else if (md.name.length > 253 || !DNS.test(md.name)) add('error', ['metadata', 'name'], '이름 형식 오류: 소문자·숫자·"-"·"."만 가능하고 영숫자로 시작·끝나야 하며 253자 이하여야 합니다', 'invalid', { val: md.name, rule: "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" });
+        else if (LABEL_KINDS.has(a.kind) ? (md.name.length > 63 || !DNS_LABEL.test(md.name)) : (md.name.length > 253 || !DNS.test(md.name))) add('error', ['metadata', 'name'], '이름 형식 오류: 소문자·숫자·"-"·"."만 가능하고 영숫자로 시작·끝나야 하며 253자 이하여야 합니다', 'invalid', { val: md.name, rule: "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" });
       }
       if (d.ns && empty(md.namespace)) add('warn', ['metadata', 'namespace'], '네임스페이스 범위 리소스입니다. 비워 두면 현재 프로젝트(네임스페이스)에 만들어집니다', 'hint');
       if (!d.ns && !empty(md.namespace)) add('warn', ['metadata', 'namespace'], '클러스터 범위 리소스라 namespace는 무시됩니다', 'hint');
@@ -479,7 +480,7 @@
       let target = M;
       if (opt.op === 'patch') {
         if (!body) { fail(400, 'BadRequest', 'the body of the request was in an unknown format - accepted media types include: application/json-patch+json, application/merge-patch+json, application/apply-patch+yaml'); }
-        else if (ctype === 'application/merge-patch+json') target = mergePatch(M, body);
+        else if (ctype === 'application/merge-patch+json') { if (!isObj(body)) fail(400, 'BadRequest', 'the body of the request was in an unknown format - merge-patch body must be a JSON object'); else target = mergePatch(M, body); }
         else target = M;
       }
       if (status === 200 && !body2) {

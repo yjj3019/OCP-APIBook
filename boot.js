@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 부팅: 아이콘 채우기, 앱 시작, 서비스 워커 등록. 인라인 스크립트가 없어야 CSP(script-src 'self')가 성립한다. */
 (function () {
   document.querySelectorAll('[data-ic]').forEach(function (e) { e.innerHTML = Icon(e.dataset.ic, +e.dataset.s || 16); e.style.display = 'inline-flex'; });

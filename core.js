@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 앱 코어: 상태·저장소·지연 로딩·통합 검색 엔진·라우터·셸(사이드바/테마/토스트) */
 (function () {
   'use strict';
@@ -102,9 +103,11 @@
   /* 한 버전 전용 엔진(그래프·시뮬레이터·상세의 관계도용) */
   App.engines = async v => {
     if (!App.ENG[v]) {
-      await Promise.all([App.loadCore(v), App.lazy('graph.js')]);
-      const db = App.prep(v), b = { guide: db.guide, apis: db.apis };
-      App.ENG[v] = { E: ApiSearch.create(b), G: ApiGraph.create(b), db };
+      App.ENG[v] = (async () => {
+        await Promise.all([App.loadCore(v), App.lazy('graph.js')]);
+        const db = App.prep(v), b = { guide: db.guide, apis: db.apis };
+        return { E: ApiSearch.create(b), G: ApiGraph.create(b), db };
+      })().catch(e => { delete App.ENG[v]; throw e; });
     }
     return App.ENG[v];
   };

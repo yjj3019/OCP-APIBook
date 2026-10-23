@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // node tools/test-build.js : data/ 검증
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const D = path.join(__dirname, '..', 'data');

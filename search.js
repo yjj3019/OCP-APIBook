@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 검색 엔진: 브라우저(window.ApiSearch)와 Node(module.exports) 양쪽에서 동작 */
 (function (root) {
   const CAT_KO = {

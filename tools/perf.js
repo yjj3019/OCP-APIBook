@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // 성능 측정: node tools/perf.js  (임시 포트에서 serve.js 를 띄워 측정 후 종료)
 const http = require('http'), fs = require('fs'), path = require('path'), { spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..'), PORT = 8700 + Math.floor(Math.random() * 200);

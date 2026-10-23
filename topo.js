@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 토폴로지(전체 관계도)와 API 상세의 '연결 관계' 화면 */
 (function (root) {
   const TL = { mention: '문서에서 언급', curated: '일반 관계', same: '같은 이름', variant: '이름 변형', group: '같은 그룹' };

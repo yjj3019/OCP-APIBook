@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* ui-kit.js - 인라인 SVG 아이콘(Icon) + 경량 구문 강조(Hi). 외부 의존성 없음. */
 (function () {
   'use strict';

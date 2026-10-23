@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 화면들: 홈 · 탐색 · API 상세 · 버전 비교 · 가이드 · 토폴로지 · 시뮬레이터 */
 (function () {
   'use strict';
@@ -115,7 +116,7 @@
     };
     const mark = () => { App.$$('#bl .row').forEach((e, i) => e.classList.toggle('cur', i === cur)); const c = $('#bl .row.cur'); if (c) c.scrollIntoView({ block: 'nearest' }); };
     const sync = () => { const qs = Object.entries(st).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&'); history.replaceState(null, '', App.href('browse' + (qs ? ':' + qs : ''))); };
-    let raf = 0; const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { limit = 60; apply(); sync(); }); };
+    let raf = 0; const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (!document.body.contains($('#bq'))) return; limit = 60; apply(); sync(); }); };
     $('#bq').addEventListener('input', e => { st.q = e.target.value; later(); });
     $('#bq').addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!shown.length) return; e.preventDefault(); cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length; mark(); }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 배포 스탬프: 정적 파일의 내용 해시를 index.html 의 ?v= 토큰과 서비스 워커(sw.js)에 반영한다.
  *   node tools/stamp.js           (데이터를 다시 빌드한 뒤, 또는 코드·CSS·폰트를 고친 뒤 실행)
  * - 코드 토큰: 앱 JS/CSS/폰트 전체의 해시. 하나라도 바뀌면 모든 코드 URL 이 바뀐다(지연 로딩 스크립트 포함: core.js 의 ?v= 를 재사용).

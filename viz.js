@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 캔버스 그래프 뷰: 힘 기반 배치, 확대/이동/드래그, 선택·강조. 외부 라이브러리 없음. */
 (function (root) {
   const STYLE = {
@@ -145,7 +146,7 @@
       const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
       c.addEventListener('pointerdown', e => {
         c.setPointerCapture(e.pointerId); this.ptr.set(e.pointerId, pos(e)); moved = 0;
-        if (this.ptr.size === 2) { const [a, b] = [...this.ptr.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), k: this.view.k }; drag = null; return; }
+        if (this.ptr.size === 2) { if (drag && drag.type === 'node') drag.n.fixed = !!drag.n.pin; const [a, b] = [...this.ptr.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), k: this.view.k }; drag = null; return; }
         const [px, py] = pos(e), n = this.hit(px, py);
         drag = n ? { type: 'node', n } : { type: 'pan', x: px - this.view.x, y: py - this.view.y };
         if (n) { n.fixed = true; }

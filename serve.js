@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // 정적 서버: node serve.js [port] [--host 0.0.0.0] [--no-precompress] [--dev]
 // 기본은 127.0.0.1(로컬 전용). 외부 허용은 --host 0.0.0.0 또는 HOST 환경변수.
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib');

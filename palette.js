@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* 커맨드 팔레트(Ctrl/⌘+K, /), 단축키, 도움말 */
 (function () {
   'use strict';

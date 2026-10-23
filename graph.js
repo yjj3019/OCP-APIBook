@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /* API 관계 그래프 데이터. 브라우저(window.ApiGraph)와 Node 양쪽에서 동작 */
 (function (root) {
   // 관계 종류. src: 'doc' = 이 문서의 텍스트에서 추출, 'name' = 이름 규칙, 'curated' = 일반적인 구조(문서 밖 지식)
