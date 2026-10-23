@@ -1,6 +1,8 @@
 # OCP API Book
 
 Red Hat OpenShift Container Platform **4.22 / 4.21 / 4.20** API 문서를 수집해 만든, 검색 가능한 **API 레퍼런스 북**입니다.
+**배포 주소: <https://yjj3019.github.io/OCP-APIBook/>**
+
 원본: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html-single/api_overview/index>
 
 외부 서버나 빌드 도구 없이 정적 파일만으로 동작합니다(Node.js는 로컬 서버용).
@@ -17,7 +19,7 @@ node serve.js 9000 --host 0.0.0.0   # 같은 네트워크의 다른 기기에서
 
 ## GitHub Pages 배포
 
-`main` 에 push 하면 `.github/workflows/pages.yml` 이 정적 파일만 골라 배포합니다. 처음 한 번 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 지정하세요. 주소는 `https://<계정>.github.io/OCP-APIBook/` 입니다. 하위 경로(`/OCP-APIBook/`)에서 서비스 워커·글꼴·데이터가 정상 동작함을 확인했습니다.
+`main` 에 push 하면 `.github/workflows/pages.yml` 이 정적 파일만 골라 배포합니다. 처음 한 번 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 지정하세요. 주소는 <https://yjj3019.github.io/OCP-APIBook/> 입니다. 하위 경로(`/OCP-APIBook/`)에서 서비스 워커·글꼴·데이터가 정상 동작함을 확인했습니다.
 
 ## MCP 서버
 
