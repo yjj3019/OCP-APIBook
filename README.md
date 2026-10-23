@@ -19,6 +19,28 @@ node serve.js 9000 --host 0.0.0.0   # 같은 네트워크의 다른 기기에서
 
 `main` 에 push 하면 `.github/workflows/pages.yml` 이 정적 파일만 골라 배포합니다. 처음 한 번 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 지정하세요. 주소는 `https://<계정>.github.io/OCP-APIBook/` 입니다. 하위 경로(`/OCP-APIBook/`)에서 서비스 워커·글꼴·데이터가 정상 동작함을 확인했습니다.
 
+## MCP 서버
+
+같은 데이터를 MCP(Model Context Protocol) 서버로도 쓸 수 있습니다. 의존성 없이 `node` 만 있으면 되고, 읽기 전용이며 네트워크·클러스터에 접근하지 않습니다(stdio).
+
+```
+claude mcp add ocp-api-book -- node /경로/OCP-APIBook/mcp/server.js
+```
+
+다른 클라이언트는 설정에 `{"command": "node", "args": ["/경로/OCP-APIBook/mcp/server.js"]}` 를 넣으면 됩니다.
+
+| 도구 | 역할 |
+|---|---|
+| `search_apis` | 키워드 검색(한글·영문·Kind·필드 경로·제약 문장), 버전 무관 통합 결과 |
+| `list_apis` | 분류·범위·제약 유형별 목록과 개수 |
+| `get_api` | 설명, 제공 버전, 호환성 레벨, 엔드포인트, 최상위 필드 |
+| `get_fields` | 중첩 필드 상세(`spec.tls`, 배열은 `spec.rules[]`) |
+| `get_constraints` | 제약·제한 사항과 적용 버전 |
+| `compare_versions` | 4.20 / 4.21 / 4.22 사이 필드·타입·필수·엔드포인트 차이 |
+| `generate_manifest` | 필수 필드만 채운 YAML 뼈대 |
+
+`node mcp/smoke.js` 로 stdio 왕복 테스트를 돌릴 수 있습니다. 제약 사항은 웹 화면과 같은 추출 결과라서 같은 한계가 있습니다.
+
 ## 기능
 
 - **통합 검색**: 같은 API는 버전과 관계없이 한 번만 나오고, 제공 버전과 **제약·제한 사항**이 함께 표시됩니다. 한글·영문·약어(`mcp`, `pvc`)·오타·`apiVersion`·중첩 필드 경로(`spec.tls.termination`)·제약 문장(`deprecated`, `immutable`)까지 찾습니다. 분류, 범위, 안정성(GA/Beta/Alpha), 제약 유무로 거를 수 있습니다.
@@ -54,6 +76,7 @@ node build.js && node tools/test-build.js && node tools/stamp.js
 | `data/` | 데이터베이스(`build.js` 가 생성). `merged.js`(통합·제약), `legacy.js`, `<버전>.js`, `<버전>.fidx.js`, `<버전>.fields.<책>.js (책별 분할)` |
 | `build.js` | 수집 원본(`_scrape/`) → `data/` 변환, 제약 추출 |
 | `tools/` | 수집 스크립트, 빌드 테스트(`test-build.js`), 전송량 측정(`perf.js`) |
+| `mcp/` | MCP 서버(`server.js`)와 스모크 테스트(`smoke.js`) |
 | `serve.js` | 압축·캐시·보안 헤더를 갖춘 정적 서버 |
 
 그래프·시뮬레이터·버전별 큰 데이터는 필요할 때만 불러옵니다.
