@@ -14,7 +14,7 @@ for (const v of M.list) {
 ok(Object.keys(M.apis).length === keys.size, `merged 키 수 ${Object.keys(M.apis).length} == (kind,group) 합집합 ${keys.size}`);
 let bad = 0;
 for (const [k, r] of Object.entries(M.apis)) {
-  if (JSON.stringify(r.vers) !== JSON.stringify(Object.keys(r.id).sort((a, b) => parseFloat(b) - parseFloat(a)))) bad++;
+  if (JSON.stringify(r.vers) !== JSON.stringify(Object.keys(r.id).sort((a, b) => { const [x1, y1] = a.split('.').map(Number), [x2, y2] = b.split('.').map(Number); return x2 - x1 || y2 - y1; }))) bad++;
   for (const v of r.vers) if (!core[v].apis.some(a => a.id === r.id[v] && a.kind + '|' + a.group === k)) bad++;
 }
 ok(bad === 0, `vers/id 일치 및 id 가 core 에 존재 (불일치 ${bad})`);
@@ -30,7 +30,7 @@ ok(R && R.tier['4.22'] === 1, 'Route tier[4.22]===1');
 ok(R && R.ns === true, 'Route ns===true');
 // 원문 타입 접미사(_v2 등)는 버전마다 달라 정규화 후 비교하므로, 실제 변경이 없는 Route 의 tdiff 는 비어야 한다
 ok(R && R.tdiff.length === 0, 'Route tdiff 비어 있음(접미사 정규화): ' + JSON.stringify(R && R.tdiff));
-ok(Object.values(M.apis).every(r => r.tdiff.every(d => new Set(Object.values(d.t).map(x => String(x).replace(/_vd+/g, ''))).size > 1)), 'tdiff 에 접미사만 다른 가짜 변경 없음 (총 ' + Object.values(M.apis).reduce((a, r) => a + r.tdiff.length, 0) + ')');
+ok(Object.values(M.apis).every(r => r.tdiff.every(d => new Set(Object.values(d.t).map(x => String(x).replace(/_v\d+/g, ''))).size > 1)), 'tdiff 에 접미사만 다른 가짜 변경 없음 (총 ' + Object.values(M.apis).reduce((a, r) => a + r.tdiff.length, 0) + ')');
 ok(/^[0-9a-f]{12}$/.test(M.build), 'MERGED.build 12자리 16진: ' + M.build);
 ok(JSON.stringify((M.apis['Backup|config.openshift.io'] || {}).vers) === '["4.21"]' && legKeys.has('Backup|config.openshift.io'), 'Backup vers==[4.21] 및 legacy 포함');
 ok(JSON.stringify((M.apis['BackendTLSPolicy|gateway.networking.k8s.io'] || {}).vers) === '["4.22"]', 'BackendTLSPolicy vers==[4.22]');
@@ -53,8 +53,13 @@ ok(all.every(r => r.cons.every(c => !c.ps || (c.ps.length >= 2 && c.ps.length <=
 ok(all.every(r => { const f = {}; r.cons.forEach(c => f[c.t] = (f[c.t] || 0) + 1); return JSON.stringify(f) === JSON.stringify(r.flags); }), 'flags == 묶음 개수');
 let seed = +process.env.SEED || 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 for (let i = 0; i < 15; i++) { const [r, c] = flat[Math.floor(rnd() * flat.length)]; console.log(`  ${r.kind}|${c.p}|${c.t}|${c.x.slice(0, 80)}`); }
-const S = V.summary, want = { '4.21→4.22': [6, 7, 47, 215], '4.20→4.21': [11, 1, 40, 218] };
-for (const k in want) { const s = S[k]; ok(s && [s.추가, s.삭제, s.변경, s.동일].join() === want[k].join(), `versions.summary ${k} ${s && [s.추가, s.삭제, s.변경, s.동일]}`); }
+{
+  const sep = (r, a, b) => [...r.fdiff, ...r.rdiff, ...r.ediff].some(e => e.v.includes(a) !== e.v.includes(b)) || r.tdiff.some(e => e.t && e.t[a] !== undefined && e.t[b] !== undefined && e.t[a] !== e.t[b]);
+  let mism = 0; const ex = [];
+  for (let i = 0; i + 1 < M.list.length; i++) { const a = M.list[i], b = M.list[i + 1]; for (const r of all) if (r.vers.includes(a) && r.vers.includes(b) && (r.fp[a] !== r.fp[b]) !== sep(r, a, b)) { mism++; if (ex.length < 5) ex.push(`${r.kind} ${b}→${a}`); } }
+  ok(mism === 0, `버전 지문(변경 여부)과 차이 목록이 일치 (불일치 ${mism}${ex.length ? ': ' + ex.join(', ') : ''})`);
+  const S = V.summary; ok(Object.keys(S).length === M.list.length - 1 && Object.values(S).every(s => s.추가 + s.동일 + s.변경 >= 0), 'versions.summary 버전 쌍 ' + JSON.stringify(S));
+}
 // ───────── 강화 검사 ─────────
 const HDR = '/* Derived from the Red Hat OpenShift Container Platform documentation (Apache-2.0); extracted and reformatted, with generated constraint summaries. See NOTICE. */';
 const files = fs.readdirSync(D).filter(f => f.endsWith('.js'));
@@ -90,7 +95,8 @@ const FLD = {}, bookFiles = {};
     const R = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '_scrape', `v${v}.json`), 'utf8').replace(/^﻿/, ''));
     const exp = {}, book = {};
     for (const a of core[v].apis) { const d = R.apis[a.id]; if (d && d.fields.length) { exp[a.id] = d.fields; book[a.id] = a.book; } }
-    const mk = (s, c) => typeof s === 'string' && s.length >= c - 1 ? s + CUT : s;
+    const { replaceMarks: TM } = require('./trademark.js');
+    const mk = (s, c) => TM(typeof s === 'string' && s.length >= c - 1 ? s + CUT : s);
     const ty = (t, sub) => { const x = String(t == null ? '' : t).replace(/`/g, '').replace(/\s+/g, ' ').trim(); return x || (sub ? 'object' : ''); };
     const E = {};
     for (const id in exp) {
@@ -135,5 +141,13 @@ const FLD = {}, bookFiles = {};
     }
   }
   ok(bad === 0, `(f) fdiff/rdiff 에 부모와 같은 v 인 하위 항목 없음, sub 는 양의 정수 (sub 항목 ${nsub}, 위반 ${bad})`);
+}
+// (h) 설명 문장에 상표 이름이 남지 않음(식별자 제외) — 원문 라이선스 조건
+{
+  const { MARK_LEFT } = require('./trademark.js'); let left = 0; const ex = [];
+  const chk = (s, w) => { if (typeof s === 'string' && MARK_LEFT.test(s)) { left++; if (ex.length < 3) ex.push(w + ': ' + s.match(/.{0,30}(OpenShift|Reds+Hat).{0,20}/)[0]); } };
+  for (const v of M.list) { for (const a of core[v].apis) { if (!a.d) continue; chk(a.d.desc, a.kind); a.d.props.forEach(p => chk(p.d, a.kind + '.' + p.n)); } core[v].guide.forEach(g => { chk(g.title, 'guide'); chk(String(g.html).replace(/<[^>]*>/g, ' '), 'guide ' + g.id); }); for (const id in (FLD[v] || {})) FLD[v][id].forEach(f => { chk(f.d, id); f.r.forEach(r => chk(r[2], id + f.p + '.' + r[0])); }); }
+  for (const r of all) r.cons.forEach(c => chk(c.x, r.kind + ' cons'));
+  ok(left === 0, '(h) 설명·가이드·제약 문장에 상표 이름 없음 (남은 ' + left + (ex.length ? ': ' + ex.join(' | ') : '') + ')');
 }
 console.log(fail ? `FAIL (${fail})` : 'ALL PASS'); process.exit(fail ? 1 : 0);

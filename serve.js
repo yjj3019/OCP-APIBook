@@ -13,14 +13,14 @@ const T = 'text/', U = '; charset=utf-8';
 const MIME = { '.html': T + 'html' + U, '.js': T + 'javascript' + U, '.css': T + 'css' + U, '.json': 'application/json' + U,
   '.svg': 'image/svg+xml' + U, '.txt': T + 'plain' + U, '.md': T + 'markdown' + U, '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']);
-// 허용 목록: "루트 직하 파일(확장자 허용) + data/, fonts/ 하위"만 서빙. 그 밖의 폴더(tools, _scrape, node_modules, .git ...)는 이름과 무관하게 거부.
+// 허용 목록: "루트 직하 파일(확장자 허용) + data/ 하위"만 서빙. 그 밖의 폴더(tools, _scrape, node_modules, .git ...)는 이름과 무관하게 거부.
 const ROOT_NOEXT = new Set(['LICENSE', 'NOTICE']);                                          // 확장자 없는 공개 문서
 const ROOT_DENY = new Set(['serve.js', 'build.js', 'package.json', 'package-lock.json']);   // 개발용 파일은 서빙 안 함
 // 보안 헤더. CSP 는 인라인 스크립트/이벤트 핸들러를 막아 XSS 피해를 줄인다(script-src 에 'unsafe-inline' 금지).
-// style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 폰트는 fonts/ 에서 자체 제공하므로 외부 출처를 허용하지 않는다. base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
+// style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 글꼴은 사용자 시스템 글꼴만 쓴다(웹 글꼴 없음). base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'none'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin' };
 
 const realpath = p => new Promise(ok => fs.realpath.native(p, (e, r) => ok(e ? null : r)));
@@ -31,7 +31,7 @@ function allowed(real) {
   const parts = rel.split(path.sep), name = parts[parts.length - 1], ext = path.extname(name).toLowerCase();
   if (parts.some(s => s.startsWith('.'))) return false;
   if (parts.length === 1) return !ROOT_DENY.has(name) && (ROOT_NOEXT.has(name) || ext in MIME);
-  return (parts[0] === 'data' || parts[0] === 'fonts') && ext in MIME;
+  return parts[0] === 'data' && ext in MIME;
 }
 // URL 경로 -> 실제 파일 경로(허용되지 않거나 없으면 null). 디렉터리는 index.html 로.
 async function resolve(urlPath) {
@@ -94,13 +94,13 @@ async function handle(req, res) {
   const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}${enc ? '-' + enc : ''}"`;
   // data/ 파일이 ?v=<해시 12자 이상 16진수> 로 요청되면 내용이 바뀌면 URL 도 바뀌므로 장기 캐시. 그 외는 ETag 재검증.
   const hashed = !DEV && path.relative(ROOT, file).split(path.sep)[0] === 'data' && /(^|&)v=[0-9a-f]{12,}(&|$)/i.test(query);
-  const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
+  const headers = { 'Content-Type': MIME[ext] || (ROOT_NOEXT.has(path.basename(file)) ? 'text/plain; charset=utf-8' : 'application/octet-stream'), ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
     'Cache-Control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache', ...SEC };
   if (TEXTUAL.has(ext)) headers.Vary = 'Accept-Encoding';
 
   // 조건부 요청: If-None-Match 가 있으면 그것만, 없으면 If-Modified-Since
   const inm = req.headers['if-none-match'], ims = Date.parse(req.headers['if-modified-since']);
-  if (inm ? inm.split(',').some(t => t.trim() === etag || t.trim() === '*') : ims >= Math.floor(st.mtimeMs / 1000) * 1000) {
+  if (inm ? inm.split(',').some(t => t.trim() === etag || t.trim() === '*') : (ims <= Date.now() && ims >= Math.floor(st.mtimeMs / 1000) * 1000)) {
     res.writeHead(304, headers); return res.end();
   }
   if (enc) {

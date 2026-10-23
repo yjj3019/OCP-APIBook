@@ -9,7 +9,7 @@ const call = (name, args) => rpc('tools/call', { name, arguments: args }).then(m
 let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ') + name + (info ? '  ' + info : '')); if (!c) fail++; };
 (async () => {
   const i = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
-  t('initialize', i.result.serverInfo.name === 'ocp-api-book' && i.result.protocolVersion === '2025-06-18');
+  t('initialize', i.result.serverInfo.name === 'api-book' && i.result.protocolVersion === '2025-06-18');
   p.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const l = await rpc('tools/list'); t('tools/list', l.result.tools.length === 7, l.result.tools.map(x => x.name).join(','));
   let r = await call('search_apis', { query: 'route tls termination', limit: 3 }); t('search_apis', !r.err && r.out.results[0].kind === 'Route', r.out.results.map(x => x.kind).join(','));
@@ -24,5 +24,12 @@ let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ')
   r = await call('get_api', { api: 'NoSuchKind' }); t('unknown api -> isError', r.err === true);
   r = await call('get_fields', { api: 'Route', path: 'spec.nope' }); t('bad path -> isError', r.err === true);
   const u = await rpc('nope/x', {}); t('unknown method -> -32601', u.error && u.error.code === -32601);
+  r = await call('get_api', { api: 'core/ConfigMap' }); t('core/Kind 해석', !r.err && r.out.apiVersion === 'v1', r.err ? r.out : '');
+  r = await call('search_apis', {}); t('query 없음 -> isError', r.err === true);
+  r = await call('search_apis', { query: 'route', limit: -3 }); t('음수 limit -> 기본값', !r.err && r.out.results.length === 10);
+  r = await call('generate_manifest', { api: 'ConfigMap', name: 'x\nspec:\n  evil: 1' }); t('name 주입 거부', r.err === true);
+  r = await call('generate_manifest', { api: 'Deployment', name: 'web' }); t('Deployment selector/template 틀', !r.err && /matchLabels:/.test(r.out.yaml) && /containers:/.test(r.out.yaml));
+  p.stdin.write('null\n"hello"\n[]\n' + JSON.stringify({ jsonrpc: '2.0', method: 'tools/list' }) + '\n');   // 서버가 죽지 않아야 하고, 알림에는 응답하지 않는다
+  const alive = await rpc('ping', {}); t('잘못된 줄 뒤에도 살아 있음', alive && alive.result && !alive.error);
   p.stdin.end(); console.log(fail ? `${fail} FAILED` : 'ALL PASS'); process.exit(fail ? 1 : 0);
 })();

@@ -2,9 +2,9 @@
 // 성능 측정: node tools/perf.js  (임시 포트에서 serve.js 를 띄워 측정 후 종료)
 const http = require('http'), fs = require('fs'), path = require('path'), { spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..'), PORT = 8700 + Math.floor(Math.random() * 200);
-const FILES = ['/index.html', '/search.js', '/graph.js', '/viz.js', '/topo.js', '/sim.js', '/data/versions.js',
-  '/data/4.22.js', '/data/4.22.fidx.js', '/data/4.22.fields.js'].filter(f => fs.existsSync(path.join(ROOT, f)));
-const FIRST = ['/index.html', '/search.js', '/data/versions.js', '/data/4.22.js', '/data/4.22.fidx.js'];
+const CODE = ['/index.html', '/app.css', '/ui-kit.js', '/search.js', '/core.js', '/views.js', '/palette.js', '/boot.js'];
+const FIRST = CODE.concat(['/data/merged.js', '/data/legacy.js', '/data/4.22.js', '/data/4.22.fidx.js']);   // 첫 화면(홈)에 실제로 필요한 파일
+const FILES = FIRST.concat(['/graph.js', '/viz.js', '/topo.js', '/sim.js', '/sim.css', '/data/4.22.fields.monitoring_apis.js']).filter(f => fs.existsSync(path.join(ROOT, f)));
 const MODES = { identity: '', gzip: 'gzip', br: 'br' };
 
 // 압축 해제 없이 raw 응답을 받아 전송 바이트와 소요시간(ms)을 잰다

@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -22,11 +22,20 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check stamps, syntax and MCP server
+        run: |
+          for f in *.js tools/*.js mcp/*.js; do node --check "$f"; done
+          node tools/stamp.js
+          git diff --exit-code -- index.html sw.js || { echo '::error::?v= 토큰/sw.js 가 최신이 아닙니다. node tools/stamp.js 를 실행해 커밋하세요.'; exit 1; }
+          node mcp/smoke.js
       - name: Assemble site (static files only)
         run: |
           mkdir _site
           cp index.html sw.js app.css sim.css ui-kit.js search.js core.js views.js palette.js boot.js graph.js viz.js topo.js sim.js LICENSE NOTICE _site/
-          cp -r fonts data _site/
+          cp -r data _site/
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

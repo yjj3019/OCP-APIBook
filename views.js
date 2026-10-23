@@ -32,12 +32,12 @@
     const tools = [['topology', '토폴로지', 'API 사이의 연결을 그래프로 보고, 노드를 눌러 설명과 관계를 확인합니다.', 'topology'], ['sim', 'API 설계 시뮬레이터', '스펙 기반 폼으로 리소스를 설계하고 검증하며 요청·응답을 미리 확인합니다.', 'flask'], ['compare', '버전 비교', '4.22 · 4.21 · 4.20 사이에 추가·삭제·변경된 API와 필드를 봅니다.', 'compare'], ['guide', '가이드', 'API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정.', 'file-text']];
     const favs = App.fav.list().filter(k => U.byKey.has(k)), recs = App.recent.list().filter(k => U.byKey.has(k) && !favs.includes(k)).slice(0, 6);
     const lrow = k => { const a = U.byKey.get(k); return `<a class="lrow" href="${App.hrefFor(a)}"><span class="k">${esc(a.kind)}</span>${stabBadge(a)}<span class="g">${esc(a.group || 'core')}</span></a>`; };
-    const sel = App.ver, prev = VL[VL.indexOf(sel) + 1] || VL[VL.indexOf(sel) - 1], ds = diffSets(prev, sel);
+    const sel = App.ver, older = VL[VL.indexOf(sel) + 1], prev = older || sel, cur2 = older ? sel : (VL[VL.indexOf(sel) - 1] || sel), ds = diffSets(prev, cur2);
     const names = (arr, n) => arr.slice(0, n).map(k => k.split('|')[0]).join(', ') + (arr.length > n ? ' 외 ' + (arr.length - n) + '개' : '');
     const cats = Object.entries(U.cats).sort((x, y) => y[1] - x[1]);
     const page = App.render(`
       <section class="hero">
-        <div class="eyebrow">OpenShift Container Platform · ${VL.join(' · ')}</div>
+        <div class="eyebrow">API 레퍼런스 · ${VL.join(' · ')}</div>
         <h1>API를 찾고, 비교하고,<br> 직접 설계해 보세요</h1>
         <p>세 버전의 API 레퍼런스를 한곳에 모았습니다. 필드 이름만 알아도 찾을 수 있고, 버전별 제약과 변경 사항이 함께 표시됩니다.</p>
         <button class="herosearch" id="hs">${ic('search', 20)}<span>API·필드·가이드 검색 (예: route)</span><kbd>Ctrl K</kbd></button>
@@ -55,12 +55,12 @@
       <div class="grid g4">${cats.map(([b, n]) => `<a class="card catcard" href="${App.href('browse:cat=' + b)}"><span class="ci">${ic(CAT_IC[b] || 'box', 18)}</span><span><b>${esc(catName(b))}</b><small>${n} API</small></span></a>`).join('')}</div>
       <div class="grid g2" style="margin-top:28px">
         <div class="card listcard"><div class="cardhead">${ic('clock', 15)} 최근 본 · 즐겨찾기</div>${favs.concat(recs).length ? favs.map(lrow).concat(recs.map(lrow)).join('') : `<p class="note" style="padding:6px 12px 12px">API 상세에서 ${ic('star', 13)}를 눌러 즐겨찾기에 추가하세요. 최근 본 API도 여기에 쌓입니다.</p>`}</div>
-        <div class="card listcard"><div class="cardhead">${ic('compare', 15)} ${prev} → ${sel} 변화 <a class="c" style="margin-left:auto" href="${App.href('compare')}">전체 보기</a></div>
+        <div class="card listcard"><div class="cardhead">${ic('compare', 15)} ${prev} → ${cur2} 변화 <a class="c" style="margin-left:auto" href="${App.href('compare')}">전체 보기</a></div>
           <div class="change"><div class="add"><b>+${ds.A.length}</b><span>추가</span></div><div class="del"><b>−${ds.R.length}</b><span>삭제</span></div><div class="chg"><b>${ds.C.length}</b><span>변경</span></div></div>
           <p class="note" style="padding:0 14px 12px;margin:0">${ds.A.length ? `<b>추가</b> ${esc(names(ds.A, 4))}<br>` : ''}${ds.R.length ? `<b>삭제</b> ${esc(names(ds.R, 4))}` : ''}</p></div>
       </div>`);
     $('#hs').addEventListener('click', () => App.openPalette && App.openPalette());
-    $('#main .page').insertAdjacentHTML('beforeend', '<p class="foot note" style="margin-top:34px">비공식 프로젝트입니다. Red Hat, Inc.와 제휴·보증 관계가 없으며 API 내용은 Red Hat OpenShift 문서(Apache-2.0)에서 수집했습니다. <a href="#" id="aboutlink2">정보 · 고지</a></p>');
+    $('#main .page').insertAdjacentHTML('beforeend', '<p class="foot note" style="margin-top:34px">비공식 프로젝트이며 원문 문서의 저작자와 제휴·보증 관계가 없습니다. API 내용은 Apache-2.0으로 공개된 문서에서 수집해 변형했습니다. <a href="#" id="aboutlink2">정보 · 고지</a></p>');
     $('#aboutlink2').addEventListener('click', e => { e.preventDefault(); App.showAbout(); });
   };
 
@@ -71,7 +71,7 @@
     return `<li><a class="row" data-i="${i}" href="${App.hrefFor(a)}"><div class="l1"><span class="kind">${App.hlz(a.kind, H)}</span><span class="gv">${App.hlz(gvOf(a), H)}</span>${stabBadge(a)}${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span></div>
       <p class="snip">${s.src !== '설명' ? '<em>필드</em>' : ''}${App.hlz(s.text, H)}</p><div class="l2">${App.pills(m)}${App.consChips(m, 4)}</div></a></li>`;
   };
-  V.browse = async arg => {
+  V.browse = async (arg, my) => {
     App.title('API 탐색'); App.curKey = null;
     const st = Object.assign({ q: '', cat: '', sc: '', st: '', cn: '', sort: '' }, parseQS(arg)), E = U.E;
     const opt = (v, l, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`;
@@ -93,14 +93,14 @@
       let list = r.apis.filter(x => {
         const a = x.d.a, m = a.m, f = m.flags || {};
         if (st.sc === 'ns' && m.ns !== true) return false; if (st.sc === 'cl' && m.ns !== false) return false;
-        if (st.st && App.stab(m.gv[m.vers[0]]) !== st.st) return false;
+        if (st.st && App.stab(m.gv[App.pickVer(m, App.ver)]) !== st.st) return false;
         if (st.cn === 'dep' && !f.dep) return false; if (st.cn === 'prev' && !f.prev) return false; if (st.cn === 'imm' && !f.imm) return false;
         if (st.cn === 'ver' && !App.availText(m)) return false;
         return true;
       });
       if (st.sort === 'name' || (!q && !st.sort)) list = list.slice().sort((x, y) => x.d.a.kind.localeCompare(y.d.a.kind));
       else if (st.sort === 'group') list = list.slice().sort((x, y) => (x.d.a.group + x.d.a.kind).localeCompare(y.d.a.group + y.d.a.kind));
-      else if (st.sort === 'new') list = list.slice().sort((x, y) => (x.d.a.m.vers.length - y.d.a.m.vers.length) || x.d.a.kind.localeCompare(y.d.a.kind));
+      else if (st.sort === 'new') { const born = m => (m.vers.includes(VL[0]) ? 0 : 100) + VL.indexOf(m.vers[m.vers.length - 1]); list = list.slice().sort((x, y) => (born(x.d.a.m) - born(y.d.a.m)) || x.d.a.kind.localeCompare(y.d.a.kind)); }
       rows = list; shown = rows.slice(0, limit); cur = rows.length && q ? 0 : -1;
       const anyF = st.cat || st.sc || st.st || st.cn;
       $('#fclr').hidden = !anyF; ['cat', 'sc', 'st', 'cn'].forEach(k => $('#f-' + k).classList.toggle('on', !!st[k]));
@@ -114,9 +114,9 @@
       const g = $('#bg'); g.innerHTML = q && r.guide.length ? `<div class="sec-title">가이드 문서</div><ul class="list guidelist">${r.guide.map(x => `<li><a class="row" href="${App.href('guide:' + x.g.id)}"><div class="l1"><span style="font-weight:500">${App.hlz(x.g.title, H)}</span></div></a></li>`).join('')}</ul>` : '';
       mark();
     };
-    const mark = () => { App.$$('#bl .row').forEach((e, i) => e.classList.toggle('cur', i === cur)); const c = $('#bl .row.cur'); if (c) c.scrollIntoView({ block: 'nearest' }); };
+    const mark = (noScroll) => { App.$$('#bl .row').forEach((e, i) => e.classList.toggle('cur', i === cur)); const c = $('#bl .row.cur'); if (c && !noScroll) c.scrollIntoView({ block: 'nearest' }); };
     const sync = () => { const qs = Object.entries(st).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&'); history.replaceState(null, '', App.href('browse' + (qs ? ':' + qs : ''))); };
-    let raf = 0; const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (!document.body.contains($('#bq'))) return; limit = 60; apply(); sync(); }); };
+    let raf = 0; const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (my !== undefined && my !== App.activeSeq) return; if (!document.body.contains($('#bq'))) return; limit = 60; apply(); sync(); }); };
     $('#bq').addEventListener('input', e => { st.q = e.target.value; later(); });
     $('#bq').addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!shown.length) return; e.preventDefault(); cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length; mark(); }
@@ -126,7 +126,13 @@
     $('#bx').addEventListener('click', () => { st.q = ''; $('#bq').value = ''; $('#bq').focus(); later(); });
     App.$$('select[data-f]').forEach(s => s.addEventListener('change', () => { st[s.dataset.f] = s.value; later(); }));
     $('#fclr').addEventListener('click', () => { st.cat = st.sc = st.st = st.cn = ''; App.$$('select[data-f]').forEach(s => { if (s.dataset.f !== 'sort') s.value = ''; }); later(); });
-    $('#bm').addEventListener('click', e => { if (e.target.closest('#more')) { limit += 120; apply(); } });
+    $('#bm').addEventListener('click', e => {
+      if (!e.target.closest('#more')) return;
+      const from = shown.length; limit += 120; shown = rows.slice(0, limit);
+      $('#bl').insertAdjacentHTML('beforeend', shown.slice(from).map((x, i) => rowHTML(x, from + i, P, H, st.q.trim())).join(''));
+      $('#bm').innerHTML = rows.length > shown.length ? `<button class="btn ghost" id="more">${ic('chevron-down', 14)} ${rows.length - shown.length}개 더 보기</button>` : '';
+      mark(true); const nx = App.$$('#bl .row')[from]; if (nx) nx.focus({ preventScroll: true });
+    });
     $('#bl').addEventListener('keydown', e => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       const rows = App.$$('#bl .row'), i = rows.indexOf(document.activeElement); if (i < 0) return;
@@ -267,17 +273,17 @@
       </section>
       <div style="margin-top:16px">${consCard(a, m, dv)}</div>
       <div class="sticky-tabs"><div class="tabs" id="stabs">${tabs.map(([i, l, ico]) => `<a href="#" data-sec="${i}" class="${i === 'c-cons' ? 'on' : ''}"${i === 'c-cons' ? ' aria-current="true"' : ''}>${ic(ico, 14)} ${l}</a>`).join('')}</div></div>
-      <section id="c-usage"><h2 class="sec">사용 예시</h2><div class="code"><div class="codehead" role="tablist"><button role="tab" data-t="0" aria-selected="true">YAML</button><button role="tab" data-t="1" aria-selected="false">oc 명령</button><button role="tab" data-t="2" aria-selected="false">REST</button><button class="cp" id="cp">${ic('copy', 14)} 복사</button></div><pre><code id="codeb"></code></pre></div><p class="note">필수 필드(하위 필드 포함)로 만든 기본 틀입니다. 값은 필드 설명을 보고 채우세요. 실제 검증은 <a href="${App.href('sim:' + m.id[dv])}">시뮬레이터</a>에서 할 수 있습니다.</p></section>
+      <section id="c-usage"><h2 class="sec">사용 예시</h2><div class="code"><div class="codehead"><div class="codetabs" role="tablist" aria-label="예시 형식"><button role="tab" id="ctab0" data-t="0" aria-selected="true" aria-controls="codep">YAML</button><button role="tab" id="ctab1" data-t="1" aria-selected="false" aria-controls="codep">oc 명령</button><button role="tab" id="ctab2" data-t="2" aria-selected="false" aria-controls="codep">REST</button></div><button class="cp" id="cp">${ic('copy', 14)} 복사</button></div><pre id="codep" role="tabpanel" aria-labelledby="ctab0" tabindex="0"><code id="codeb"></code></pre></div><p class="note">필수 필드(하위 필드 포함)로 만든 기본 틀입니다. 값은 필드 설명을 보고 채우세요. 실제 검증은 <a href="${App.href('sim:' + m.id[dv])}">시뮬레이터</a>에서 할 수 있습니다.</p></section>
       <section id="c-fields"><h2 class="sec">필드 <span class="c">${x.props.length}개 최상위</span></h2><div id="fieldhost"><div class="skel" style="height:120px"></div></div></section>
       <section id="c-eps"><h2 class="sec">엔드포인트 <span class="c">${x.eps.length}개</span></h2><div id="epshost">${epsHTML(a, db.params || {})}</div></section>
       <section id="c-rel"><h2 class="sec">관계</h2><div id="ego"><div class="skel" style="height:160px"></div></div></section>
       <a class="ext" href="${esc(App.safeUrl(a.url))}" target="_blank" rel="noopener">${ic('external', 14)} 공식 문서에서 전체 설명 보기</a>`);
     // 코드 탭
     const tabsC = [['yaml', yamlFull(d, null)], ['bash', ocFor(d)], ['bash', restFor(d)]]; let ct = 0;
-    const setCode = i => { ct = i; App.$$('.codehead [data-t]').forEach((b, j) => { b.setAttribute('aria-selected', j === i); b.tabIndex = j === i ? 0 : -1; }); $('#codeb').innerHTML = App.hi(tabsC[i][1], tabsC[i][0]); };
+    const setCode = i => { ct = i; App.$$('.codehead [data-t]').forEach((b, j) => { b.setAttribute('aria-selected', j === i); b.tabIndex = j === i ? 0 : -1; }); const cpn = $('#codep'); if (cpn) cpn.setAttribute('aria-labelledby', 'ctab' + i); $('#codeb').innerHTML = App.hi(tabsC[i][1], tabsC[i][0]); };
     setCode(0);
     $('.codehead').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) setCode(+b.dataset.t); });
-    $('.codehead').addEventListener('keydown', e => { if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return; e.preventDefault(); const n = (ct + (e.key === 'ArrowRight' ? 1 : -1) + 3) % 3; setCode(n); App.$$('.codehead [data-t]')[n].focus(); });
+    $('.codetabs').addEventListener('keydown', e => { if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return; e.preventDefault(); const n = (ct + (e.key === 'ArrowRight' ? 1 : -1) + 3) % 3; setCode(n); App.$$('.codehead [data-t]')[n].focus(); });
     $('#cp').addEventListener('click', e => App.copy(tabsC[ct][1], e.currentTarget));
     $('#favb').addEventListener('click', () => { const on = App.fav.toggle(key); $('#favb').setAttribute('aria-pressed', on); $('#favb').innerHTML = `${ic(on ? 'star-fill' : 'star', 15)} <span>${on ? '즐겨찾기됨' : '즐겨찾기'}</span>`; App.toast(on ? '즐겨찾기에 추가했습니다' : '즐겨찾기에서 뺐습니다', on ? 'star-fill' : 'star'); });
     $('#cpb').addEventListener('click', e => App.copy(`${d.gv} ${a.kind}`, e.currentTarget));
@@ -293,7 +299,7 @@
     const loadF = () => App.ensureFields(dv, a.id).then(() => {
       if (dead) return; const F = App.fields(dv)[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
       tabsC[0][1] = yamlFull(d, F); if (ct === 0 && $('#codeb')) setCode(0);
-    }).catch(() => { const fh = $('#fieldhost'); if (!fh) return; fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드 데이터를 불러오지 못했습니다.</p><button class="btn ghost sm" id="fretry">다시 시도</button></div>'; $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); }); });
+    }).catch(() => { if (dead) return; const fh = $('#fieldhost'); if (!fh) return; fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드 데이터를 불러오지 못했습니다.</p><button class="btn ghost sm" id="fretry">다시 시도</button></div>'; $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); }); });
     loadF();
     const relIO = new IntersectionObserver(async es => {
       if (!es.some(e => e.isIntersecting)) return; relIO.disconnect();
@@ -313,6 +319,7 @@
         <div class="qbox" style="max-width:300px">${ic('search', 17)}<input id="cq" placeholder="API 이름으로 거르기" aria-label="이름 필터"></div></div><div id="cres"></div>`);
     const render = () => {
       const f = $('#cf').value, t = $('#ct').value, q = $('#cq').value.trim().toLowerCase();
+      history.replaceState(null, '', App.href(`compare:from=${f}&to=${t}&tab=${tab}`));
       if (f === t) { $('#cres').innerHTML = '<div class="empty">서로 다른 두 버전을 고르세요.</div>'; return; }
       const ds = diffSets(f, t), flt = arr => q ? arr.filter(k => k.toLowerCase().includes(q)) : arr;
       const sets = { added: flt(ds.A), removed: flt(ds.R), changed: flt(ds.C), same: flt(ds.S) };
@@ -337,7 +344,7 @@
     const g = id && G.find(s => s.id === id);
     if (!g) {
       if (id) App.toast('해당 가이드를 찾을 수 없어 목록을 보여 드립니다', 'info');
-      App.render(`<div class="pagehead"><div class="eyebrow">가이드 · ${App.ver}</div><h1>API 지원 단계와 정책</h1><p>API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정 문서입니다. 상단 검색에서 본문도 찾을 수 있습니다.</p></div><ul class="list guidelist">${G.filter(x => x.level <= 3 && !/^Overview|^API overview|^OpenShift Container/.test(x.title)).map(x => `<li><a class="row" href="${App.href('guide:' + x.id)}" style="${x.level === 3 ? 'margin-left:18px;width:calc(100% - 18px)' : ''}"><span style="font-weight:${x.level === 2 ? 600 : 400}">${esc(x.title)}</span></a></li>`).join('')}</ul>`);
+      App.render(`<div class="pagehead"><div class="eyebrow">가이드 · ${App.ver}</div><h1>API 지원 단계와 정책</h1><p>API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정 문서입니다. 상단 검색에서 본문도 찾을 수 있습니다.</p></div><ul class="list guidelist">${G.filter(x => x.level <= 3 && !/^Overview|^API overview|^OpenShift Container|^(The )?[Pp]latformb/.test(x.title)).map(x => `<li><a class="row" href="${App.href('guide:' + x.id)}" style="${x.level === 3 ? 'margin-left:18px;width:calc(100% - 18px)' : ''}"><span style="font-weight:${x.level === 2 ? 600 : 400}">${esc(x.title)}</span></a></li>`).join('')}</ul>`);
       return;
     }
     App.title(g.title);

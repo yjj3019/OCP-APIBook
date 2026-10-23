@@ -35,7 +35,7 @@
     '크론': ['cronjob'], '데몬': ['daemonset'], '복제': ['replicaset', 'replication'], '접근': ['access', 'authorization'],
     '암호화': ['encryption', 'apiserver'], '감사': ['audit'], '노출': ['route', 'service'], '호스트': ['host'],
     '설명': [], '사용법': [], '방법': [], '만들기': [], '생성': [], '조회': [], '삭제': [], '예제': [], '예시': [],
-    '스트림': ['stream', 'imagestream'], '이미지스트림': ['imagestream'], '태그': ['tag', 'imagetag'], '풀': ['pull'], '가져오기': ['import'],
+    '스트림': ['stream', 'imagestream'], '이미지스트림': ['imagestream'], '태그': ['tag', 'imagetag'], '풀': ['pull', 'pool'], '영구': ['persistent', 'persistentvolume'], '퍼시스턴트': ['persistent'], '클레임': ['claim', 'persistentvolumeclaim'], '영구볼륨': ['persistentvolume'], '시큐리티': ['security'], '가져오기': ['import'],
     '조직': ['group', 'user'], '계정': ['serviceaccount', 'user'], '서비스계정': ['serviceaccount'], '설정맵': ['configmap'], '네트워크정책': ['networkpolicy'],
     '가상머신': ['virtualmachine', 'vm'], '폐지': ['deprecated', 'removed'], '폐지예정': ['deprecated', 'removed'], '변경불가': ['immutable', 'cannot', 'changed'], '불변': ['immutable'], '미리보기': ['preview', 'technology'], '기능게이트': ['feature', 'gate'], '제약': ['must', 'cannot', 'only'], '싱글턴': ['singleton', 'cluster'], '상호배타': ['mutually', 'exclusive'], '쿠버네티스': ['kubernetes'], '오픈시프트': ['openshift'],
   };
@@ -247,7 +247,7 @@
 
     function search(q, opt) {
       opt = opt || {};
-      const key = String(q).trim().slice(0, 300).toLowerCase() + '|' + (opt.cat || '');
+      const key = String(q).trim().slice(0, 300) + '|' + (opt.cat || '');
       const hit = rcache.get(key); if (hit) return hit;
       const P = parse(q);
       const inCat = d => !opt.cat || d.a.book === opt.cat;
@@ -258,6 +258,8 @@
       const cand = new Set();
       per.forEach(m => m.forEach((_, i) => cand.add(i)));
       const useGv = /[./]/.test(rl) && rl.length >= 4;
+      let cnHit = false;   // 붙여 쓴 필드명(insecureEdgeTerminationPolicy)이 정확히 일치하면 그 문서들만
+      if (P.joined.length >= 6) docs.forEach(d => { if (d.f.cname.has(P.joined)) { cand.add(d.i); cnHit = true; } });
       if (P.joined.length >= 2 || useGv) docs.forEach(d => { if ((P.joined.length >= 2 && (d.low.includes(P.joined) || d.initials === P.joined)) || (useGv && (d.gv.toLowerCase().includes(rl) || (d.a.group && rl.includes(d.a.group.toLowerCase()))))) cand.add(d.i); });
 
       let res = [];
@@ -274,15 +276,17 @@
           total += (d.gv.toLowerCase() === rl || (d.a.group && d.a.group.toLowerCase() === rl)) ? 60 : 30; missing = 0;
         }
         if (P.terms.length && d.desc.toLowerCase().includes(P.terms.map(t => t.t).join(' '))) total += 6;
+        { let syn = 0; for (const t of P.terms) for (const al of t.alts) if (!al.acr && al.t !== t.t && al.t === d.low) syn = Math.max(syn, 150 * al.w); total += syn; }
+        if (P.joined.length >= 6 && d.f.cname.has(P.joined)) { total += 40; missing = 0; }
         total -= d.low.length * 0.01;
         if (total > 0) res.push({ d, total, missing, why });
       });
       const strict = res.filter(r => r.missing === 0);
       let relaxed = false;
-      if (strict.length >= 3 || P.terms.length < 2) res = strict;
+      if (strict.length >= 3 || P.terms.length < 2 || cnHit) res = strict;
       else { const need = Math.ceil(P.terms.length / 2); res = res.filter(r => P.terms.length - r.missing >= need); relaxed = strict.length < res.length; res.forEach(r => { r.total *= 1 - 0.25 * r.missing; r.rx = r.missing > 0; }); }
       res.sort((x, y) => y.total - x.total || x.d.a.kind.localeCompare(y.d.a.kind));
-      const apis = res.slice(0, 80).map(r => ({ d: r.d, score: r.total, why: Object.keys(r.why).sort((a, b) => r.why[b] - r.why[a])[0], rx: r.rx, snip: null }));
+      const apis = res.map(r => ({ d: r.d, score: r.total, why: Object.keys(r.why).sort((a, b) => r.why[b] - r.why[a])[0], rx: r.rx, snip: null }));
       // 가이드 검색
       const gt = P.terms.map(t => t.alts.filter(a => !a.acr).map(a => a.t));
       const gres = [];

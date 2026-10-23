@@ -25,14 +25,16 @@
       this.ro = new ResizeObserver(() => this.resize()); this.ro.observe(canvas.parentElement);
       this._cc = null; this._tc = () => { this._cc = null; this.request(); };
       window.addEventListener('themechange', this._tc); this._mq = matchMedia('(prefers-color-scheme: dark)'); this._mq.addEventListener('change', this._tc);
+      this._dq = null; this._dr = () => this.resize();
       this.resize();
     }
-    destroy() { cancelAnimationFrame(this.raf); this.ro.disconnect(); window.removeEventListener('themechange', this._tc); this._mq.removeEventListener('change', this._tc); this.dead = true; }
+    destroy() { cancelAnimationFrame(this.raf); this.ro.disconnect(); window.removeEventListener('themechange', this._tc); this._mq.removeEventListener('change', this._tc); if (this._dq) this._dq.removeEventListener('change', this._dr); this.dead = true; }
     colors() { return this._cc || (this._cc = { dark: isDark(), ink: css('--ink') || '#111', sub: css('--sub') || '#666', line: css('--line') || '#ccc', accent: css('--accent') || '#2d5bff', bg: css('--bg') || '#fff', panel: css('--panel') || '#fff' }); }
     resize() {
       const p = this.c.parentElement, w = Math.max(200, p.clientWidth), h = Math.max(200, p.clientHeight);
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       this.c.width = w * dpr; this.c.height = h * dpr; this.c.style.width = w + 'px'; this.c.style.height = h + 'px';
+      if (this.dpr !== dpr || !this._dq) { if (this._dq) this._dq.removeEventListener('change', this._dr); this._dq = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`); this._dq.addEventListener('change', this._dr); }
       this.dpr = dpr; this.w = w; this.h = h; this.request();
     }
     setData(nodes, edges, opt) {
@@ -141,11 +143,13 @@
       }
     }
     _bind() {
-      const c = this.c; c.style.touchAction = 'none'; c.style.cursor = 'grab';
-      let drag = null, moved = 0, pinch = null;
+      const c = this.c, emb = !!this.o.embedded; c.style.touchAction = emb ? 'pan-y' : 'none'; c.style.cursor = 'grab';
+      let drag = null, moved = 0, pinch = null, down = null, armed = false;
+      if (emb) { c.addEventListener('pointerdown', () => { armed = true; }); c.addEventListener('pointerleave', () => { armed = false; }); }
       const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
       c.addEventListener('pointerdown', e => {
-        c.setPointerCapture(e.pointerId); this.ptr.set(e.pointerId, pos(e)); moved = 0;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        c.setPointerCapture(e.pointerId); this.ptr.set(e.pointerId, pos(e)); moved = 0; down = pos(e);
         if (this.ptr.size === 2) { if (drag && drag.type === 'node') drag.n.fixed = !!drag.n.pin; const [a, b] = [...this.ptr.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), k: this.view.k }; drag = null; return; }
         const [px, py] = pos(e), n = this.hit(px, py);
         drag = n ? { type: 'node', n } : { type: 'pan', x: px - this.view.x, y: py - this.view.y };
@@ -156,9 +160,9 @@
         if (this.ptr.has(e.pointerId)) this.ptr.set(e.pointerId, [px, py]);
         if (pinch && this.ptr.size === 2) { const [a, b] = [...this.ptr.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; this.zoomAt(mx, my, Math.max(this.o.minZoom, Math.min(this.o.maxZoom, pinch.k * d / pinch.d))); return; }
         if (drag) {
-          moved++;
-          if (drag.type === 'pan') { this.view.x = px - drag.x; this.view.y = py - drag.y; this.request(); }
-          else { const [wx, wy] = this.toWorld(px, py); drag.n.x = wx; drag.n.y = wy; if (moved > 2) this.reheat(0.3); this.request(); }
+          if (down && Math.hypot(px - down[0], py - down[1]) >= 5) moved = Infinity;
+          if (drag.type === 'pan') { if (!moved) return; this.view.x = px - drag.x; this.view.y = py - drag.y; this.request(); }
+          else if (moved) { const [wx, wy] = this.toWorld(px, py); drag.n.x = wx; drag.n.y = wy; this.reheat(0.3); this.request(); }
           return;
         }
         const n = this.hit(px, py), id = n ? n.id : null;
@@ -168,13 +172,17 @@
       const up = e => {
         const was = this.ptr.has(e.pointerId); this.ptr.delete(e.pointerId); if (this.ptr.size < 2) pinch = null;
         if (!was || !drag) return;
-        if (drag.type === 'node') { drag.n.fixed = !!drag.n.pin; if (moved <= 3) this.o.onSelect(drag.n); }
-        else if (moved <= 3) this.o.onSelect(null);
+        if (drag.type === 'node') { drag.n.fixed = !!drag.n.pin; if (!moved) this.o.onSelect(drag.n); }
+        else if (!moved) this.o.onSelect(null);
         drag = null;
       };
       c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
       c.addEventListener('pointerleave', () => { if (this.hover) { this.hover = null; this.o.onHover(null); this.request(); } });
-      c.addEventListener('wheel', e => { e.preventDefault(); const [px, py] = pos(e); this.zoomAt(px, py, Math.max(this.o.minZoom, Math.min(this.o.maxZoom, this.view.k * Math.exp(-e.deltaY * 0.0015)))); }, { passive: false });
+      c.addEventListener('wheel', e => {
+        if (emb && !armed && !e.ctrlKey && !e.metaKey) return;   // 페이지 스크롤에 맡김
+        e.preventDefault(); const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.h : 1);
+        const [px, py] = pos(e); this.zoomAt(px, py, Math.max(this.o.minZoom, Math.min(this.o.maxZoom, this.view.k * Math.exp(-dy * 0.0015))));
+      }, { passive: false });
       c.addEventListener('dblclick', () => this.fit());
     }
     zoomAt(px, py, k) { const v = this.view, [wx, wy] = this.toWorld(px, py); v.k = k; v.x = px - wx * k; v.y = py - wy * k; this.request(); }

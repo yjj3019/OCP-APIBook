@@ -5,7 +5,7 @@
   const TB = { mention: '문서', curated: '일반', same: '동명', variant: '변형', group: '그룹' };
   const TIP = {
     mention: '이 문서의 설명·필드 설명에 상대 API 이름이 나오는 경우',
-    curated: 'OpenShift/Kubernetes의 일반적인 구조를 바탕으로 정리한 관계(이 문서에서 추출한 것이 아님)',
+    curated: '컨테이너 플랫폼의 일반적인 구조를 바탕으로 정리한 관계(이 문서에서 추출한 것이 아님)',
     same: '이름은 같고 API 그룹이 다른 경우', variant: '이름 끝부분이 다른 API 이름과 같은 경우(예: ClusterRoleBinding → RoleBinding)', group: '같은 API 그룹에 속한 경우',
   };
   let C = null, catIdx = {};
@@ -101,7 +101,7 @@
       <p class="note">노드를 누르면 설명이 옆(좁은 화면에서는 아래)에 나타납니다. 실선은 문서에서 찾은 관계, 점선은 일반적인 구조입니다. 휠로 확대, 드래그로 이동합니다.</p>`;
     const cv = host.querySelector('canvas'), info = host.querySelector('#egoinfo'), box = host.querySelector('.gcv');
     const hover = tipFor(box);
-    const view = new GraphView(cv, { labels: 'all', rep: 900, edgeLen: 95, gravity: 0.004, dimEdge: 0.3, dimNode: 0.5, onSelect: n => { if (n) selectNode(n.id); }, onHover: hover });
+    const view = new GraphView(cv, { embedded: true, labels: 'all', rep: 900, edgeLen: 95, gravity: 0.004, dimEdge: 0.3, dimNode: 0.5, onSelect: n => { if (n) selectNode(n.id); }, onHover: hover });
     function build() {
       const edgeOk = e => state.types[e.type], set = new Map([[centerId, 0]]), cap = state.depth === 1 ? 30 : 46;
       let frontier = [centerId];
@@ -150,7 +150,7 @@
       <div class="tchips" id="ttypes">${typeChips(state, false)}</div>
       <div class="tchips cats" id="tcats">${cats.map(b => `<button class="chip" data-tcat="${b}" aria-pressed="false"><i class="dot" style="background:${GraphColor(catIdx[b], dark())}"></i>${esc(C.CAT[b] || String(b).replace(/_apis$/, '').replace(/_/g, ' '))}</button>`).join('')}</div>
       <div class="tbody"><div class="gcv big"><canvas role="img" aria-label="전체 API 토폴로지 그래프. 키보드로는 아래 노드 목록을 사용하세요"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
-      <div class="tinfo" id="tinfo"></div></div>
+      <div class="tinfo" id="tinfo" aria-live="polite"></div></div>
       <details class="epd" id="nl"><summary>노드 목록 (키보드·스크린리더용)</summary><div class="in" id="nlist"></div></details>`;
     cats.forEach(b => { if (!(b in catIdx)) catIdx[b] = Object.keys(catIdx).length; });
     const cv = host.querySelector('canvas'), info = host.querySelector('#tinfo'), box = host.querySelector('.gcv'), stat = host.querySelector('#tstat');
@@ -183,7 +183,11 @@
       if (state.q) { const r = E.search(state.q).apis.slice(0, 40); keep = new Set(r.map(x => x.d.a.url.split('#')[1])); }
       else if (state.cat) keep = new Set(G.nodes.filter(n => n.book === state.cat).map(n => n.id));
       if (state.focused && state.sel) { const s = new Set([state.sel, ...(view.nb.get(state.sel) || [])]); keep = keep ? new Set([...keep].filter(i => s.has(i))) : s; }
-      view.setKeep(keep); return keep;
+      view.setKeep(keep); syncList(keep); return keep;
+    }
+    function syncList(keep) {
+      const box = host.querySelector('#nlist'); if (!box || !host.querySelector('#nl').open) return;
+      box.innerHTML = [...view.nodes].filter(n => !keep || keep.has(n.id)).sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"${n.id === state.sel ? ' aria-current="true"' : ''}><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('') || '<p class="note">표시할 노드가 없습니다.</p>';
     }
     function renderInfo() { info.innerHTML = infoHTML(state.sel, state.types, { focusBtn: !!state.sel, focused: state.focused }); }
     function selectNode(id) {
@@ -207,11 +211,8 @@
       if (a.dataset.act === 'open') C.go('api:' + state.sel);
       if (a.dataset.act === 'focus') { state.focused = !state.focused; applyKeep(); renderInfo(); if (state.focused) view.focusOn(state.sel, 1.2); else view.fit(); }
     });
-    host.querySelector('#nl').addEventListener('toggle', e => {
-      const box = host.querySelector('#nlist'); if (!e.target.open || box.dataset.ready) return; box.dataset.ready = '1';
-      box.innerHTML = [...view.nodes].sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('');
-      box.addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (b) { selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.scrollIntoView({ block: 'nearest' }); } });
-    });
+    host.querySelector('#nl').addEventListener('toggle', e => { if (e.target.open) applyKeep(); });
+    host.querySelector('#nlist').addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (!b) return; selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.scrollIntoView({ block: 'nearest' }); const k = info.querySelector('.ikind'); if (k) { k.tabIndex = -1; k.focus({ preventScroll: true }); } });
     const onTheme = () => host.querySelectorAll('#tcats [data-tcat]').forEach(b => { const d = b.querySelector('.dot'); if (d) d.style.background = GraphColor(catIdx[b.dataset.tcat] || 0, dark()); });
     window.addEventListener('themechange', onTheme);
     build(false);

@@ -4,7 +4,7 @@
  *   data/<ver>.js           가이드 + API 목록 + 설명·최상위 필드·엔드포인트
  *   data/<ver>.fidx.js      중첩 필드 경로 색인(이름만, 검색용)
  *   data/<ver>.fields.js    중첩 필드 상세(설명 포함, 상세 화면에서 지연 로딩)
- * 사용: node build.js [버전...]   (기본: _scrape 에 있는 모든 버전)
+ * 사용: node build.js   (_scrape 에 있는 모든 버전을 함께 빌드한다. 일부 버전만 빌드하는 것은 지원하지 않음)
  */
 const fs = require('fs'), path = require('path');
 const crypto = require('crypto');
@@ -13,13 +13,16 @@ const SRC = path.join(__dirname, '_scrape'), OUT = path.join(__dirname, 'data');
 fs.mkdirSync(OUT, { recursive: true });
 
 const all = fs.readdirSync(SRC).map(f => (f.match(/^v(\d+\.\d+)\.json$/) || [])[1]).filter(Boolean);
-const vers = (process.argv.length > 2 ? process.argv.slice(2) : all).sort((a, b) => parseFloat(b) - parseFloat(a));
+const vcmp = (a, b) => { const [x1, y1] = a.split('.').map(Number), [x2, y2] = b.split('.').map(Number); return x2 - x1 || y2 - y1; };   // 내림차순
+if (process.argv.length > 2) { console.error('부분 빌드는 지원하지 않습니다: 통합 데이터(merged/legacy/versions)가 모든 버전을 필요로 합니다. 인자 없이 `node build.js` 로 실행하세요.'); process.exit(1); }
+const vers = all.sort(vcmp);
 const HDR = '/* Derived from the Red Hat OpenShift Container Platform documentation (Apache-2.0); extracted and reformatted, with generated constraint summaries. See NOTICE. */\n';
 const WINDOW = (name, v, obj) => HDR + `(window.${name}=window.${name}||{})[${JSON.stringify(v)}]=${JSON.stringify(obj)};\n`;
 const WINDOW_MERGE = (name, v, obj) => HDR + `(window.${name} = window.${name} || {})[${JSON.stringify(v)}] = Object.assign((window.${name} || {})[${JSON.stringify(v)}] || {}, ${JSON.stringify(obj)});\n`;
 
 // ───────── 출력 단계 정리: 제로 폭 문자 제거, 이상 타입 정리, 잘린 설명 표시 ─────────
 const ZW = /[​‌‍﻿]/g;
+const { replaceMarks: TM, replaceMarksHTML: TMH } = require('./tools/trademark.js');   // 원문 조건: 수정본에서 상표 제거(설명 문장만, 식별자 제외)
 const CUT = ' …(원문에서 계속)';
 const OLD_CAP = { desc: 8000, prop: 4000, fdesc: 3000, row: 4000 };   // 과거 수집 시 스크레이퍼 상한(현재 scrape.js 는 상향됨; 기존 _scrape 원본에만 해당)
 const deepZ = o => typeof o === 'string' ? o.replace(ZW, '') : Array.isArray(o) ? o.map(deepZ) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, x]) => [deepZ(k), deepZ(x)])) : o;
@@ -28,14 +31,14 @@ const stats = { emptyType: 0, truncMarked: 0 };
 function fixApi(d) {
   if (!d) return d;
   const m = (s, cap) => { if (typeof s === 'string' && s.length >= cap - 1) { stats.truncMarked++; return s + CUT; } return s; };
-  d.desc = m(d.desc, OLD_CAP.desc);
+  d.desc = TM(m(d.desc, OLD_CAP.desc));
   const hasSub = p => d.fields.some(g => g.p === p || g.p.startsWith(p + '.') || g.p.startsWith(p + '[]'));
-  for (const p of d.props) { p.d = m(p.d, OLD_CAP.prop); const t = cleanT(p.t); if (!t) stats.emptyType++; p.t = t || (hasSub('.' + p.n) ? 'object' : ''); }
+  for (const p of d.props) { p.d = TM(m(p.d, OLD_CAP.prop)); const t = cleanT(p.t); if (!t) stats.emptyType++; p.t = t || (hasSub('.' + p.n) ? 'object' : ''); }
   for (const f of d.fields) {
-    f.d = m(f.d, OLD_CAP.fdesc);
+    f.d = TM(m(f.d, OLD_CAP.fdesc));
     const ft = cleanT(f.t); if (!ft) stats.emptyType++; f.t = ft || (f.r.length ? 'object' : '');
     for (const r of f.r) {
-      r[2] = m(r[2], OLD_CAP.row);
+      r[2] = TM(m(r[2], OLD_CAP.row));
       const t = cleanT(r[1]); if (!t) stats.emptyType++;
       r[1] = t || (hasSub(f.p + '.' + r[0]) ? 'object' : '');
     }
@@ -54,7 +57,7 @@ for (const v of vers) {
   const R = read(path.join(SRC, `v${v}.json`));
   for (const id in R.apis) fixApi(R.apis[id]);   // 잘림 표시·타입 정리는 원본 길이 기준이라 제로 폭 제거보다 먼저
   Object.assign(R, deepZ({ index: R.index, guide: R.guide, apis: R.apis, params: R.params }));
-  const guide = R.guide.filter(s => s.id && s.id !== 'api-index').map(s => ({ id: s.id, level: s.level, title: s.title, html: s.html }));
+  const guide = R.guide.filter(s => s.id && s.id !== 'api-index').map(s => ({ id: s.id, level: s.level, title: TM(s.title), html: TMH(s.html) }));
   const apis = [], fidx = {}, fields = {}, bookOf = {};
   let missing = 0;
 
@@ -83,7 +86,9 @@ for (const v of vers) {
     if (d.fields.length) { fields[id] = d.fields; bookOf[id] = book; }
 
     // 버전 간 비교용 지문: 필드 경로+타입, 엔드포인트 경로+메서드
-    const sig = { f: d.props.map(p => p.n + ':' + nt(p.t)), n: d.fields.flatMap(f => f.r.map(r => f.p + '.' + r[0] + ':' + nt(r[1]))), e: d.eps.map(e => e.p + ' ' + e.ms.map(m => m.m).join(',')) };
+    const SK = /^\.?(apiVersion|kind|metadata)(\.|$)/;   // 차이 목록(SKIP_PATH)과 같은 기준
+    const sig = { f: d.props.filter(p => !SK.test(p.n)).map(p => p.n + ':' + nt(p.t)), n: d.fields.filter(f => !SK.test(f.p)).flatMap(f => f.r.map(r => f.p + '.' + r[0] + ':' + nt(r[1]))),
+      q: d.required.filter(n => !SK.test(n)).concat(d.fields.filter(f => !SK.test(f.p)).flatMap(f => (f.q || []).map(q => f.p + '.' + q))).sort(), e: d.eps.map(e => e.p + ' ' + e.ms.map(m => m.m).sort().join(',')) };
     const key = row.kind + '|' + group;
     (KEEP[v] ||= {})[key] = { rec: apis[apis.length - 1], paths: fidx[id], d, ver: version, id, book, group, kind: row.kind };
     ((meta.apis[key] ||= {})[v] = { id, v: version, fp: fp(sig) });
@@ -195,7 +200,7 @@ function bundle(cmap) {   // (t,p,x,v) 항목 -> (t,x) 묶음 {t,p,x,v,ps?,n?}, 
   const by = {};
   for (const b of g.values()) {
     const ps = [...b.paths].sort(shallow);
-    const o = { t: b.t, p: ps[0], x: b.x, v: [...b.v].sort((a, c) => parseFloat(c) - parseFloat(a)) };
+    const o = { t: b.t, p: ps[0], x: b.x, v: [...b.v].sort(vcmp) };
     if (ps.length > 1) { o.ps = ps.slice(0, PS_MAX); o.n = ps.length; }
     (by[b.t] ||= []).push(o);
   }

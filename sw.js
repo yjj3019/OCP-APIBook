@@ -1,41 +1,36 @@
 /* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = '81a89c3f8e8c-e8c97e61676f';
-const CACHE = 'ocp-api-book-' + BUILD;
+const BUILD = 'ccc3fd6d1082-6aa678b9e122';
+const CACHE = 'api-book-' + BUILD;
 const PRECACHE = [
   "./",
-  "fonts/plex-sans.woff2",
-  "fonts/plex-mono-400.woff2",
-  "fonts/fonts.css",
-  "app.css?v=81a89c3f8e8c",
-  "sim.css?v=81a89c3f8e8c",
-  "ui-kit.js?v=81a89c3f8e8c",
-  "data/merged.js?v=d8d18de3d907",
+  "app.css?v=ccc3fd6d1082",
+  "sim.css?v=ccc3fd6d1082",
+  "ui-kit.js?v=ccc3fd6d1082",
+  "data/merged.js?v=07d22a68e083",
   "data/legacy.js?v=16898af37395",
-  "search.js?v=81a89c3f8e8c",
-  "core.js?v=81a89c3f8e8c",
-  "views.js?v=81a89c3f8e8c",
-  "palette.js?v=81a89c3f8e8c",
-  "boot.js?v=81a89c3f8e8c",
-  "graph.js?v=81a89c3f8e8c",
-  "viz.js?v=81a89c3f8e8c",
-  "topo.js?v=81a89c3f8e8c",
-  "sim.js?v=81a89c3f8e8c",
-  "data/4.22.js?v=e8c97e61676f",
-  "data/4.22.fidx.js?v=e8c97e61676f",
-  "fonts/plex-mono-500.woff2",
-  "fonts/plex-mono-600.woff2"
+  "search.js?v=ccc3fd6d1082",
+  "core.js?v=ccc3fd6d1082",
+  "views.js?v=ccc3fd6d1082",
+  "palette.js?v=ccc3fd6d1082",
+  "boot.js?v=ccc3fd6d1082",
+  "graph.js?v=ccc3fd6d1082",
+  "viz.js?v=ccc3fd6d1082",
+  "topo.js?v=ccc3fd6d1082",
+  "sim.js?v=ccc3fd6d1082",
+  "data/4.22.js?v=6aa678b9e122",
+  "data/4.22.fidx.js?v=6aa678b9e122"
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(CACHE);
-    await Promise.all(PRECACHE.map(u => c.add(new Request(u, { cache: 'reload' })).catch(() => { /* 일부 실패해도 설치는 진행 */ })));
-    self.skipWaiting();
+    const r = await Promise.allSettled(PRECACHE.map(u => c.add(new Request(u, { cache: 'reload' }))));
+    const bad = r.filter(x => x.status === 'rejected').length; if (bad) console.warn('[sw] 사전 캐시 실패', bad, '개 — 온라인에서 필요할 때 받습니다');
   })());
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k.startsWith('ocp-api-book-') && k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if ((k.startsWith('api-book-') || k.startsWith('ocp-api-book-')) && k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });
@@ -49,7 +44,7 @@ self.addEventListener('fetch', e => {
   }
   // 코드·데이터는 ?v= 해시가 URL 에 들어 있어 내용이 바뀌면 URL 도 바뀐다 → 캐시 우선
   e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(res => {
-    if (res.ok && (u.search.includes('v=') || u.pathname.includes('/fonts/'))) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
+    if (res.ok && u.search.includes('v=')) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
     return res;
   })));
 });

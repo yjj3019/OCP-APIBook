@@ -77,7 +77,7 @@
     // 확장 네트워크·IPAM
     ['AdminPolicyBasedExternalRoute', 'Namespace', '적용'], ['AdminPolicyBasedExternalRoute', 'Pod', '게이트웨이 선택'], ['CloudPrivateIPConfig', 'EgressIP', '클라우드 IP 할당'], ['EgressRouter', 'Pod', '라우터 생성'], ['EgressFirewall', 'DNSNameResolver', '도메인 해석'],
     ['NetworkAttachmentDefinition', 'IPPool@whereabouts.cni.cncf.io', 'IP 할당 기록'], ['NodeSlicePool', 'NetworkAttachmentDefinition', '노드별 슬라이스'], ['OverlappingRangeIPReservation', 'IPPool@whereabouts.cni.cncf.io', '중복 범위 예약'],
-    ['IPAMClaim', 'NetworkAttachmentDefinition', '고정 IP 예약'], ['IPAddress@ipam.cluster.x-k8s.io', 'IPAddressClaim', '요청 충족'], ['Service', 'IPAddress@networking.k8s.io', '클러스터 IP 할당'],
+    ['IPAMClaim', 'NetworkAttachmentDefinition', '고정 IP 예약'], ['Service', 'IPAddress@networking.k8s.io', '클러스터 IP 할당'],
     // DRA(동적 리소스 할당)
     ['Pod', 'ResourceClaim', '장치 요청'], ['Pod', 'ResourceClaimTemplate', '장치 요청 템플릿'], ['ResourceClaim', 'DeviceClass', '장치 클래스 사용'], ['ResourceClaim', 'ResourceSlice', '장치 할당'], ['ResourceSlice', 'Node', '노드 장치 목록'],
     // 코어 부가 리소스
@@ -98,7 +98,7 @@
   ];
 
   // 단어 하나짜리 일반 영어와 겹쳐 오탐이 많은 이름은 본문 언급 추출에서 제외
-  const EXCLUDE = new Set(['Operator', 'Config', 'Storage', 'Profile', 'Binding', 'Scale', 'Probe', 'Provisioning', 'Network', 'Event', 'Lease', 'Proxy', 'Console', 'Scheduler', 'Authentication', 'Infrastructure', 'Etcd', 'OLM', 'DNS', 'Eviction', 'Metal3Remediation', 'Identity', 'Group', 'OAuth', 'Image', 'Machine', 'Probe']);
+  const EXCLUDE = new Set(['Operator', 'Config', 'Storage', 'Profile', 'Binding', 'Scale', 'Provisioning', 'Network', 'Event', 'Lease', 'Proxy', 'Console', 'Scheduler', 'Authentication', 'Infrastructure', 'Etcd', 'OLM', 'DNS', 'Eviction', 'Metal3Remediation', 'Identity', 'Group', 'OAuth', 'Image', 'Machine', 'Probe']);
   // ↑ 일반 명사로 자주 쓰여 구분이 어려운 이름. '<Kind> object' 처럼 리소스임이 드러날 때만 허용한다.
   const STRICT_OK = /\b(Operator|Config|Storage|Profile|Binding|Scale|Probe|Network|Event|Lease|Proxy|Console|Scheduler|Authentication|Infrastructure|Etcd|DNS|Identity)\s+(object|resource|objects|resources|kind|API)\b/;
   // 그 외 한 단어짜리 이름(Pod, Service, Secret 등)은 문장 중간에 대문자로 나올 때만 언급으로 본다.
@@ -151,11 +151,13 @@
     for (const k of kinds) for (const o of kinds) {
       // 접미사가 두 단어 이상(RoleBinding, MachineSet 등)일 때만 변형으로 본다. Service/Operator 같은 한 단어는 오탐이 많다.
       if (k !== o && o.length >= 7 && k.length > o.length + 2 && k.endsWith(o) && (o.match(/[A-Z]/g) || []).length >= 2 && /^[A-Z]/.test(k.slice(0, k.length - o.length))) {
-        byKind.get(k).forEach(n => add(n, pick(o, n), 'variant', '', 1));
+        // 다른 API 계열(authorization.k8s.io ↔ authorization.openshift.io 등)로 넘어가는 변형은 오탐이 많아 같은 그룹 뿌리(끝 두 라벨)에서만 잇는다
+        const root = g => (g || '').split('.').slice(-2).join('.');
+        byKind.get(k).forEach(n => { const c = byKind.get(o).filter(t => root(t.group) === root(n.group)); const t = c.find(x => x.group === n.group) || c[0]; if (t) add(n, t, 'variant', '', 1); });
       }
     }
     // 4) 문서 본문 언급
-    const names = kinds.filter(k => k.length >= 4).sort((a, b) => b.length - a.length);
+    const names = kinds.filter(k => k.length >= 3).sort((a, b) => b.length - a.length);
     const re = new RegExp('(?<![A-Za-z0-9])(' + names.join('|') + ')(?![A-Za-z0-9])', 'g');
     docs.forEach((a, i) => {
       const n = nodes[i], d = a.d; if (!d) return;

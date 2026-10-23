@@ -14,7 +14,7 @@
     { t: '버전 비교', k: 'compare diff 비교 변경 버전', i: 'compare', run: () => App.nav('compare') },
     { t: '가이드', k: 'guide 가이드 호환성 정책 tier', i: 'file-text', run: () => App.nav('guide') },
     { t: '테마 바꾸기 (시스템/라이트/다크)', k: 'theme dark light 다크 라이트 테마', i: 'sun', run: () => App.cycleTheme() },
-    ...VL.map(v => ({ t: `문서 버전을 ${v}로 전환`, k: `version 버전 ${v}`, i: 'layers', run: () => { const { h } = App.parseHash(); App.setVer(v); location.hash = v + '/' + h; App.go(); } })),
+    ...VL.map(v => ({ t: `문서 버전을 ${v}로 전환`, k: `version 버전 ${v}`, i: 'layers', run: () => { const { h } = App.parseHash(); App.setVer(v); const nh = '#' + v + '/' + h; if (location.hash !== nh) location.hash = nh; else App.go(); } })),
     { t: '단축키 보기', k: 'help shortcut 단축키 도움말', i: 'keyboard', run: () => App.showHelp() },
   ];
 
@@ -120,6 +120,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open ? close() : App.openPalette(); return; }
     if (e.key === 'Escape') { const h = $('#help'); if (h && !h.hidden) { closeHelp(); return; } if (open) { close(); return; } App.closeDrawer(); return; }
     if (typing(document.activeElement) || e.ctrlKey || e.metaKey || e.altKey || open) return;
+    { const hp = $('#help'); if (hp && !hp.hidden) return; }
     if (e.key === '/') { e.preventDefault(); App.openPalette(); return; }
     if (e.key === '?') { e.preventDefault(); App.showHelp(); return; }
     if (gPending) {
@@ -128,7 +129,7 @@
     }
     if (e.key === 'g') { gPending = true; gTimer = setTimeout(() => { gPending = false; }, 1000); return; }
     if (App.cur === 'api') {
-      if (e.key === 'f') { const b = $('#favb'); if (b) b.click(); } else if (e.key === 's') { const b = $('#tosim') || document.querySelector('.dact a.btn.primary'); if (b) b.click(); }
+      if (e.key === 'f') { const b = $('#favb'); if (b) b.click(); } else if (e.key === 's') { const b = document.querySelector('.dact a.btn.primary'); if (b) b.click(); }
     }
   });
 
@@ -137,20 +138,20 @@
     const h = $('#help'); if (!h.hidden) closeHelp();
     helpPrev = document.activeElement;
     h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="정보와 고지"><div style="display:flex;align-items:center"><h3 style="margin:0">정보 · 고지</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
-      <p style="margin-top:14px"><b>OCP API Book</b>은 <b>비공식</b> 프로젝트입니다. Red Hat, Inc.와 제휴·후원·보증 관계가 없습니다.</p>
-      <p>API 설명·필드·엔드포인트는 Red Hat OpenShift Container Platform 4.20~4.22 문서에서 수집했고, 원문은 Apache License 2.0으로 공개되어 있습니다. 이 프로젝트도 Apache License 2.0을 따르며 변경 사항은 NOTICE에 적었습니다.</p>
+      <p style="margin-top:14px"><b>${App.NAME}</b>은 <b>비공식</b> 프로젝트입니다. 원문 문서의 저작자·상표권자와 제휴·후원·보증 관계가 없습니다.</p>
+      <p>API 설명·필드·엔드포인트는 Apache License 2.0으로 공개된 4.20~4.22 API 문서에서 수집해 변형했습니다. 원문 라이선스 조건에 따라 설명 문장 속 상표 이름은 중립적인 표현으로 바꿨고, API 그룹·종류 이름(예: <code>route.openshift.io</code>)은 상호운용을 위한 식별자라 그대로 둡니다. 출처, 원문 고지, 변경 사항은 NOTICE에 있습니다.</p>
       <p>"제약·제한 사항"은 원문 설명에서 자동 추출한 것이라 정확하지 않을 수 있습니다. 중요한 판단은 원문을 확인하세요. "일반 관계"(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.</p>
-      <p>Red Hat, OpenShift는 Red Hat, Inc.의 상표이며 소프트웨어를 식별하기 위해서만 이름을 사용합니다. 글꼴은 IBM Plex(SIL OFL 1.1)입니다.</p>
+      <p>글꼴은 사용자 기기의 시스템 글꼴을 씁니다(웹 글꼴을 포함하지 않음).</p>
       <p class="note"><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener noreferrer">저장소 · LICENSE · NOTICE ${ic('external', 12)}</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>
       <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
       <p style="margin:0 0 8px"><b>저장된 설정</b>: 즐겨찾기, 최근 본 API, 테마, 기준 버전, 시뮬레이터 초안이 이 브라우저에만 저장됩니다(서버로 전송되지 않음).</p>
       <button class="btn ghost" id="clrstore">${ic('trash', 14)} 저장된 설정 모두 지우기</button></div>`;
     h.hidden = false; $('#helpx').focus();
     h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) closeHelp(); };
-    h.onkeydown = e => { if (e.key === 'Tab') { e.preventDefault(); const f = [$('#helpx'), $('#clrstore')]; f[(f.indexOf(document.activeElement) + 1) % 2].focus(); } };
+    h.onkeydown = e => { if (e.key !== 'Tab') return; e.preventDefault(); const f = App.$$('#help a[href], #help button:not([disabled])'); if (!f.length) return; const i = f.indexOf(document.activeElement); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); };
     $('#clrstore').addEventListener('click', () => {
       try { Object.keys(localStorage).filter(k => k.startsWith('apibook')).forEach(k => localStorage.removeItem(k)); } catch (e) { /* 저장소 접근 불가 */ }
-      App.renderSide(); App.toast('저장된 설정을 지웠습니다', 'check');
+      App.theme = 'system'; App.applyTheme(); App.renderSide(); App.toast('저장된 설정을 지웠습니다', 'check');
     });
   };
 })();

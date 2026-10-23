@@ -53,7 +53,7 @@
     clearTimeout(toastT); toastT = setTimeout(() => { t.classList.remove('on'); }, 1800);
   };
   const bar = { n: 0, t: 0, start() { const b = $('#bar'); this.n++; b.style.opacity = 1; b.style.width = '28%'; clearTimeout(this.t); this.t = setTimeout(() => { b.style.width = '70%'; }, 250); },
-    done() { if (--this.n > 0) return; const b = $('#bar'); b.style.width = '100%'; setTimeout(() => { b.style.opacity = 0; b.style.width = '0'; }, 220); } };
+    done() { if (--this.n > 0) return; clearTimeout(this.t); const b = $('#bar'); b.style.width = '100%'; setTimeout(() => { b.style.opacity = 0; b.style.width = '0'; }, 220); } };
   App.bar = bar;
   App.copy = (text, btn) => {
     const ok = () => { App.toast('클립보드에 복사했습니다', 'check'); if (btn) { const o = btn.innerHTML; btn.innerHTML = App.ic('check', 14) + ' 복사됨'; setTimeout(() => { btn.innerHTML = o; }, 1200); } };
@@ -179,7 +179,7 @@
   };
   App.href = h => '#' + App.ver + '/' + (h || '');
   App.nav = h => { location.hash = App.href(h); };
-  App.setVer = v => { if (!VL.includes(v)) return; App.ver = v; LS.set('ver', v); $('#ver').value = v; };
+  App.setVer = v => { if (!VL.includes(v)) return; const changed = v !== App.ver; App.ver = v; LS.set('ver', v); $('#ver').value = v; if (changed && App.sideReady) renderSide(); };
   let seq = 0, first = true;
   App.activeSeq = 0;
   const focusMain = () => { const h = $('#main h1, #main h2'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); } };
@@ -202,7 +202,7 @@
       const c = await App.views[name](p.arg, my);
       if (my !== seq) { if (typeof c === 'function') { try { c(); } catch (e) { /* 무시 */ } } return; }   // 늦게 끝난 이전 화면은 버리고 정리 함수만 호출
       if (typeof c === 'function') App.cleanup = c;
-      if (!first) focusMain();
+      if (!first && !$('#main').contains(document.activeElement)) focusMain();
       first = false;
     } catch (e) { console.error(e); if (my === seq) showError('화면을 불러오지 못했습니다'); }
     finally { bar.done(); }
@@ -210,7 +210,8 @@
   App.go = go;
   const fatal = e => { console.error(e); showError('데이터를 불러오지 못했습니다', '네트워크 상태를 확인한 뒤 다시 시도해 주세요.'); };
   App.render = (html, wide) => { const m = $('#main'); m.innerHTML = `<div class="page${wide ? ' wide' : ''}">${html}</div>`; window.scrollTo(0, 0); return m.firstElementChild; };
-  App.title = t => { document.title = (t ? t + ' · ' : '') + 'OCP API Book'; };
+  App.NAME = 'API Book';   // 제품 이름(상표가 들어가지 않는 중립적인 이름)
+  App.title = t => { document.title = (t ? t + ' · ' : '') + App.NAME; };
 
   /* ---------- 사이드바 ---------- */
   const NAV = [['home', '홈', 'home', ''], ['browse', 'API 탐색', 'book', 'browse'], ['topology', '토폴로지', 'topology', 'topology'], ['sim', '시뮬레이터', 'flask', 'sim'], ['compare', '버전 비교', 'compare', 'compare'], ['guide', '가이드', 'file-text', 'guide']];
@@ -250,14 +251,14 @@
     $('#ver').innerHTML = VL.map(v => `<option value="${v}">${v}</option>`).join(''); $('#ver').value = App.ver;
     App.applyTheme();
     $('#themebtn').addEventListener('click', App.cycleTheme);
-    $('#ver').addEventListener('change', e => { const { h } = App.parseHash(); App.setVer(e.target.value); location.hash = App.ver + '/' + h; if (!h) go(); });
+    $('#ver').addEventListener('change', e => { const { h } = App.parseHash(); App.setVer(e.target.value); const nh = '#' + App.ver + '/' + h; if (location.hash !== nh) location.hash = nh; else go(); });
     $('#menubtn').addEventListener('click', () => (document.body.classList.contains('nav-open') ? App.closeDrawer() : App.openDrawer()));
     $('#scrim').addEventListener('click', () => App.closeDrawer());
     mq.addEventListener('change', App.syncDrawer); App.syncDrawer();
     $('#helpbtn').addEventListener('click', () => App.showHelp && App.showHelp());
     document.addEventListener('click', e => { if (e.target.closest('#helplink')) { e.preventDefault(); App.showHelp && App.showHelp(); } else if (e.target.closest('#aboutlink')) { e.preventDefault(); App.showAbout && App.showAbout(); } });
     window.addEventListener('hashchange', go);
-    App.ready = App.boot().then(() => { renderSide(); });
+    App.ready = App.boot().then(() => { App.sideReady = true; renderSide(); });
     if (!location.hash) history.replaceState(null, '', '#' + App.ver + '/');
     go();
     App.ready.then(() => (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { App.lazy('graph.js', 'viz.js', 'topo.js', 'sim.js').catch(() => {}); })).catch(() => {});

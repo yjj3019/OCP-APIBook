@@ -23,6 +23,8 @@
 .sf.warnf{border-color:var(--warn)}
 .sf.flash{animation:flash 1.1s}
 @keyframes flash{0%,100%{background:transparent}30%{background:var(--mark)}}
+/* 움직임 줄이기: 깜박임 대신 정적 강조(위치 안내는 유지) */
+@media (prefers-reduced-motion:reduce){.sf.flash{animation:none;background:var(--mark)}}
 .sfh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .sfn{font:600 13.5px var(--mono)}
 .sfc{accent-color:var(--accent);width:15px;height:15px}
@@ -38,6 +40,7 @@
 .sitem{border:1px dashed var(--line);border-radius:8px;padding:6px 8px;margin:6px 0}
 .sih{display:flex;justify-content:space-between;align-items:center;font-size:12.5px}
 .kv{display:grid;grid-template-columns:1fr 1.4fr auto;gap:6px;margin:4px 0}
+.kv.kv1{grid-template-columns:minmax(0,1fr) auto}
 .import textarea{width:100%;font:12.5px var(--mono);padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);margin-bottom:6px}
 .simyaml,.simreq{margin:0 0 8px;border-radius:10px;max-height:52vh;overflow:auto;white-space:pre}
 .simout .tabs{margin-bottom:10px}
