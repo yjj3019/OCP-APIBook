@@ -1,0 +1,57 @@
+OCP API Book
+Copyright 2026 OCP-APIBook contributors
+
+This project is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+----------------------------------------------------------------------
+Third-party content: Red Hat OpenShift Container Platform documentation
+----------------------------------------------------------------------
+
+The API descriptions, field specifications, endpoint listings and guide text
+in this project (the data in the data/ directory) are derived from the
+OpenShift Container Platform documentation published at:
+
+  https://docs.redhat.com/en/documentation/openshift_container_platform/
+
+The original Legal Notice of that documentation reads (verbatim):
+
+  "Copyright (c) Red Hat OpenShift documentation is licensed under the Apache
+  License 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Modified versions
+  must remove all Red Hat trademarks. Portions adapted from
+  https://github.com/kubernetes-incubator/service-catalog/ with modifications
+  by Red Hat. Red Hat, Red Hat Enterprise Linux, the Red Hat logo, the
+  Shadowman logo, JBoss, OpenShift, Fedora, the Infinity logo, and RHCE are
+  trademarks of Red Hat, Inc., registered in the United States and other
+  countries. Linux(R) is the registered trademark of Linus Torvalds in the
+  United States and other countries. Java(R) is a registered trademark of
+  Oracle and/or its affiliates. XFS(R) is a trademark of Silicon Graphics
+  International Corp. or its subsidiaries in the United States and/or other
+  countries. MySQL(R) is a registered trademark of MySQL AB in the United
+  States, the European Union and other countries. Node.js(R) is an official
+  trademark of the OpenJS Foundation. The OpenStack(R) Word Mark and OpenStack
+  logo are either registered trademarks/service marks or trademarks/service
+  marks of the OpenStack Foundation, in the United States and other countries
+  and are used with the OpenStack Foundation's permission. We are not
+  affiliated with, endorsed or sponsored by the OpenStack Foundation, or the
+  OpenStack community. All other trademarks are the property of their
+  respective owners."
+
+Changes made to the original content (Apache License 2.0, section 4(b)):
+
+  - Text was extracted from the HTML pages and reformatted into JSON/JS data.
+  - Long descriptions and tables were split, normalized and, where noted in the
+    build scripts, truncated; markup, navigation and scripts were removed.
+  - Search indexes, relationship data and a user interface were added.
+  - The "general relationships" shown in the topology view are NOT part of the
+    original documentation. They were compiled separately from general
+    knowledge of Kubernetes/OpenShift and are marked as such in the interface.
+  - Usage examples (YAML, oc, REST) are templates generated from API names,
+    group/versions and required fields; they are not taken from the original.
+
+Trademarks and affiliation
+
+This is an unofficial project. It is not affiliated with, endorsed by or
+sponsored by Red Hat, Inc. Product and API names (for example "OpenShift")
+appear only to identify the software that the documentation describes.
+Red Hat and OpenShift are trademarks of Red Hat, Inc. Anyone redistributing
+this project should review the trademark condition quoted above.

@@ -1,0 +1,19 @@
+# 수집 중간 산출물과 브라우저 자동화 임시 파일
+_scrape/
+.playwright-mcp/
+node_modules/
+*.log
+
+# 비밀 정보가 실수로 올라가지 않도록
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+credentials*
+secrets*
+.claude/
+.vscode/
+.idea/
