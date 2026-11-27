@@ -2,6 +2,7 @@
 /* API 설계 시뮬레이터: 스펙 기반 폼 → YAML → 스키마 검증 → 요청/응답 시뮬레이션 */
 (function (root) {
   'use strict';
+  const endpoints = typeof module !== 'undefined' && module.exports ? require('./endpoints') : root.ApiEndpoints;
   const LSKEY = 'apibook.sim.';
   const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
   const clone = v => JSON.parse(JSON.stringify(v));
@@ -466,15 +467,24 @@
     const md = M.metadata;
     if (!isObj(md)) add('error', ['metadata'], '필수 값 없음', 'required');
     else {
+      if (md.name != null && typeof md.name !== 'string') add('error', ['metadata', 'name'], '문자열이어야 합니다', 'type');
       if (empty(md.name) && empty(md.generateName)) add('error', ['metadata', 'name'], '필수 값 없음: name 또는 generateName 중 하나가 필요합니다', 'required');
-      else if (!empty(md.name)) {
-        if (typeof md.name !== 'string') add('error', ['metadata', 'name'], '문자열이어야 합니다', 'type');
-        else { const ne = nameError(a.kind, md.name); if (ne) add('error', ['metadata', 'name'], ne.ko, 'invalid', { val: md.name, rule: ne.en }); }
+      else if (typeof md.name === 'string' && md.name) {
+        const ne = nameError(a.kind, md.name);
+        if (ne) add('error', ['metadata', 'name'], ne.ko, 'invalid', { val: md.name, rule: ne.en });
       }
       if (d.ns && empty(md.namespace)) add('warn', ['metadata', 'namespace'], '네임스페이스 범위 리소스입니다. 비워 두면 현재 프로젝트(네임스페이스)에 만들어집니다', 'hint');
       if (!d.ns && !empty(md.namespace)) add('warn', ['metadata', 'namespace'], '클러스터 범위 리소스라 namespace는 무시됩니다', 'hint');
+      for (const field of ['namespace', 'generateName']) {
+        if (md[field] != null && typeof md[field] !== 'string') add('error', ['metadata', field], '문자열이어야 합니다', 'type');
+      }
+      for (const field of ['labels', 'annotations']) {
+        if (md[field] == null) continue;
+        if (!isObj(md[field])) add('error', ['metadata', field], '문자열 값을 가진 맵이어야 합니다', 'type');
+        else for (const [k, v] of Object.entries(md[field])) if (typeof v !== 'string') add('error', ['metadata', field, k], '문자열이어야 합니다', 'type');
+      }
+      if (md.finalizers != null && (!Array.isArray(md.finalizers) || md.finalizers.some(x => typeof x !== 'string'))) add('error', ['metadata', 'finalizers'], '문자열 배열이어야 합니다', 'type');
       if (!empty(md.namespace) && typeof md.namespace === 'string' && (md.namespace.length > 63 || !DNS_LABEL.test(md.namespace))) add('error', ['metadata', 'namespace'], '네임스페이스 형식 오류: 소문자·숫자·"-"만, 63자 이하', 'invalid');
-      if (isObj(md.labels)) for (const [k, v] of Object.entries(md.labels)) if (typeof v !== 'string') add('error', ['metadata', 'labels', k], '라벨 값은 문자열이어야 합니다', 'type');
       for (const k of Object.keys(md)) if (!META.some(m => m.name === k) && !['uid', 'resourceVersion', 'generation', 'creationTimestamp', 'ownerReferences', 'managedFields', 'deletionTimestamp', 'selfLink'].includes(k)) add('warn', ['metadata', k], `알 수 없는 필드 "${k}"`, 'unknown');
     }
     const typeOK = (st, v) => {
@@ -494,7 +504,7 @@
       for (const kid of kids) {
         if (kid.kind === 'meta') continue;
         const p = vp.concat(kid.name), v = val[kid.name], present = v !== undefined;
-        if (kid.required && (!present || empty(v) && kid.kind !== 'object' && kid.kind !== 'map-object' && kid.kind !== 'any' && !(kid.kind === 'scalar' && kid.st === 'boolean' && typeof v === 'boolean') && !(kid.name === 'apiGroup' && v === ''))) {
+        if (kid.required && (!present || v === null || empty(v) && kid.kind !== 'object' && kid.kind !== 'map-object' && kid.kind !== 'any' && !(kid.kind === 'scalar' && kid.st === 'boolean' && typeof v === 'boolean') && !(kid.name === 'apiGroup' && v === ''))) {
           add('error', p, '필수 값 없음', 'required'); if (!present) continue;
         }
         if (!present) continue;
@@ -596,20 +606,17 @@
     return Object.assign({ kind: 'Status', apiVersion: 'v1', metadata: {}, status: 'Failure', message, reason, code }, extra || {});
   }
   function resNames(d) {
-    const eps = (d.a.d && d.a.d.eps) || [];
-    // 네임스페이스 리소스는 {namespace} 가 들어간 경로만(클러스터 전체 목록 경로는 생성에 쓸 수 없음)
-    const okNs = e => !d.ns || e.p.includes('{namespace}');
-    const cols = eps.filter(e => !/\{name\}|watch/.test(e.p) && okNs(e)), ones = eps.filter(e => /\{name\}$/.test(e.p) && !/watch/.test(e.p) && okNs(e));
-    const col = cols.find(e => e.ms.some(m => m.m === 'POST')) || cols[0], one = ones.find(e => e.ms.some(m => m.m === 'GET')) || ones[0];
-    const plural = col ? col.p.split('/').pop() : one ? one.p.split('/').slice(-2)[0] : d.low + 's';
-    return { plural, full: d.a.group ? `${plural}.${d.a.group}` : plural, col, one };
+    const ops = endpoints.operations(d.a);
+    const path = (ops.list || ops.create || ops.get || ops.replace || ops.patch || ops.delete)?.p;
+    const plural = path?.split('/').filter(part => !part.startsWith('{')).pop() || d.a.kind.toLowerCase();
+    return { plural, full: d.a.group ? plural + '.' + d.a.group : plural, ops };
   }
   const NAMEPH = '<이름>';
   const OPS = [['create', '생성 (POST)', 'POST'], ['get', '조회 (GET)', 'GET'], ['replace', '전체 교체 (PUT)', 'PUT'], ['patch', '일부 수정 (PATCH)', 'PATCH'], ['delete', '삭제 (DELETE)', 'DELETE']];
   /* 작업별 문서 엔드포인트 유무: [op, 라벨, 문서에 있는지] */
   function opsOf(d) {
-    const rn = resNames(d), has = (e, m) => !!e && e.ms.some(x => x.m === m);
-    return OPS.map(([op, label, m]) => [op, label, has(op === 'create' ? rn.col : rn.one, m)]);
+    const ops = endpoints.operations(d.a);
+    return OPS.map(([op, label, m]) => [op, label, !!ops[op]]);
   }
   function k8sName(d, M) { const n = M.metadata && (M.metadata.name || M.metadata.generateName); return n || ''; }
   const errText = i => i.code === 'required' ? `${i.path}: Required value` : i.code === 'invalid' ? `${i.path}: Invalid value: "${i.val}": ${i.rule || 'invalid'}` : i.code === 'mismatch' ? `${i.path}: Invalid value` : `${i.path}: ${i.msg}`;
@@ -651,14 +658,14 @@
     // 네임스페이스: 입력창 값 > 매니페스트 metadata.namespace > default (입력창 표시값과 같은 규칙)
     const md = isObj(M.metadata) ? M.metadata : {}, strv = v => typeof v === 'string' ? v : '';
     const rn = resNames(d), ns = d.ns ? (strv(opt.ns) || strv(md.namespace) || 'default') : '', name = strv(opt.name) || strv(md.name) || NAMEPH;
+    const ep = rn.ops[opt.op];
+    if (!ep) return { supported: false, req: null, status: null, documented: [], note: '이 버전의 문서에는 해당 작업의 엔드포인트가 없습니다.' };
     const eNs = encodeURIComponent(ns), eName = name === NAMEPH ? name : encodeURIComponent(name);   // 경로 세그먼트는 URL 인코딩
     const fill = p => p.replace('{namespace}', () => eNs || 'default').replace('{name}', () => eName);
-    const q = []; if (opt.dry === 'All' && opt.op !== 'get') q.push('dryRun=All');   // dryRun 은 쓰기 요청(create/replace/patch/delete)에만 if (opt.op !== 'get' && opt.op !== 'delete') q.push('fieldValidation=' + encodeURIComponent(opt.fv));
-    const base = (a.group ? `/apis/${a.group}/${a.version}` : `/api/${a.version}`) + (d.ns ? '/namespaces/' + eNs : '') + '/' + rn.plural;
-    const colPath = rn.col ? fill(rn.col.p) : base;
-    const itemPath = rn.one ? fill(rn.one.p) : colPath + '/' + eName;
-    const method = { create: 'POST', get: 'GET', replace: 'PUT', patch: 'PATCH', delete: 'DELETE' }[opt.op];
-    const path = opt.op === 'create' ? colPath : itemPath;
+    const q = []; if (opt.dry === 'All' && opt.op !== 'get') q.push('dryRun=All');   // dryRun 은 쓰기 요청에만 적용한다.
+    if (opt.op !== 'get' && opt.op !== 'delete') q.push('fieldValidation=' + encodeURIComponent(opt.fv));
+    const method = OPS.find(([op]) => op === opt.op)[2];
+    const path = fill(ep.p);
     const qs = q.length ? '?' + q.join('&') : '';
     const headers = ['Authorization: Bearer <token>', 'Accept: application/json'];
     let body = null, ctype = null;
@@ -667,7 +674,6 @@
     if (ctype) headers.splice(1, 0, 'Content-Type: ' + ctype);
     const req = { method, path: path + qs, headers, body };
     // 문서가 정의한 응답 코드
-    const ep = (opt.op === 'create' ? rn.col : rn.one);
     const ms = ep && ep.ms.find(m => m.m === method);
     const documented = ms ? ms.r : [];
     let status = 200, body2 = null, warnings = [], note = '', defaults = [];
@@ -741,11 +747,11 @@
   const sq = s => "'" + String(s).replace(/\0/g, '').replace(/'/g, "'\\''") + "'";
   const shw = s => /^[A-Za-z0-9_.,:\/=@%+][A-Za-z0-9_.,:\/=@%+-]*$/.test(s) ? s : sq(s);   // 안전한 문자만이면 그대로, 아니면 인용
   const curl = r => {
-    const parts = ['curl -sk -X ' + r.method];
+    const parts = ['curl -sS -X ' + r.method];
     r.headers.forEach(h => parts.push(h === 'Authorization: Bearer <token>' ? '-H "Authorization: Bearer $TOKEN"' : '-H ' + sq(h)));
     if (r.body) parts.push('-d ' + sq(JSON.stringify(r.body)));
     parts.push('"$APISERVER"' + sq(r.path));
-    return '# 자체 서명 인증서 환경용. 운영에서는 -k 를 빼고 --cacert 를 쓰세요\n' + parts.join(' \\\n  ');
+    return '# 사설 인증기관을 사용하는 경우 --cacert <CA 파일>을 추가하세요\n' + parts.join(' \\\n  ');
   };
   const PATCH_T = { 'application/merge-patch+json': 'merge', 'application/json-patch+json': 'json', 'application/strategic-merge-patch+json': 'strategic' };
   /* 같은 요청을 oc 로: body 를 주면 create/replace 는 표준 입력(-f -)으로 넘김. fieldValidation → --validate(create/replace 만) */
@@ -1104,10 +1110,12 @@
       } else renderReq(ob, it, d, sch, issues);
     }
     function renderReq(ob, it, d, sch, issues) {
-      const o = it.opt, ops = opsOf(d);
+      const o = it.opt, ops = opsOf(d).filter(op => op[2]);
+      if (!ops.length) { ob.textContent = '이 버전에서 시뮬레이션할 수 있는 문서 경로가 없습니다.'; return; }
+      if (!ops.some(([op]) => op === o.op)) o.op = ops[0][0];
       const sel = (id, label, opts, val) => `<label class="sl"><span>${label}</span><select id="${id}" class="vsel">${opts.map(([v, t]) => `<option value="${v}"${v === val ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
       const ctl = el('div', { class: 'reqctl', html:
-        sel('o-op', '작업', ops.map(x => [x[0], x[1] + (x[2] ? '' : ' — 문서에 없음')]), o.op) +
+        sel('o-op', '작업', ops, o.op) +
         sel('o-fv', 'fieldValidation', [['Ignore', 'Ignore (무시)'], ['Warn', 'Warn (경고, 기본)'], ['Strict', 'Strict (오류)']], o.fv) +
         sel('o-dry', 'dryRun', [['None', '없음 (실제 저장)'], ['All', 'All (검증만)']], o.dry) +
         sel('o-scn', '시나리오', [['ok', '정상'], ['notfound', '대상 없음(404)'], ['conflict', '이미 존재/충돌(409)'], ['forbidden', '권한 없음(403)'], ['unauth', '인증 실패(401)']], o.scn) +
@@ -1120,6 +1128,7 @@
       const res = el('div', { id: 'simres' }); ob.appendChild(res);
       function drawResult() {
         const r = simulate(Object.assign({}, o), it.M, d.a, d, sch, issues, C);
+        if (!r.req) { res.textContent = r.note; return; }
         const ok = r.status < 300, cls = ok ? 'ok' : r.status < 500 ? 'warn' : 'bad';
         const doc = r.documented.length ? `<div class="mq"><b>문서에 정의된 응답</b> ${r.documented.map(x => `<span class="resp${String(x[0]).startsWith(r.status) ? ' hit' : ''}">${esc(x[0])} <code>${esc(x[1])}</code></span>`).join('')}</div>` : '';
         res.innerHTML = `<h4 class="rh">요청</h4><pre class="simreq"><code>${esc(r.req.method + ' ' + r.req.path + '\n' + r.req.headers.join('\n') + (r.req.body ? '\n\n' + JSON.stringify(r.req.body, null, 2) : ''))}</code></pre>

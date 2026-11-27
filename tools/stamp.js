@@ -5,57 +5,65 @@
  * - 데이터 토큰: data/merged.js, data/legacy.js 는 각자의 해시. 나머지 data/ 파일은 MERGED.build 를 ?v= 로 쓴다.
  * - sw.js 는 이 값들로 매번 새로 생성된다(캐시 이름에 해시가 들어가 오래된 캐시는 자동 삭제). */
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), vm = require('vm');
-const R = p => path.join(__dirname, '..', p);
-const sha = buf => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12);
+const ROOT = path.join(__dirname, '..');
+function stageStamps(root, data, out) {
+  const text = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  const sha = buf => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12);
 
-const CODE = ['app.css', 'sim.css', 'ui-kit.js', 'search.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js'];
-const LAZY = ['graph.js', 'viz.js', 'topo.js', 'sim.js'];
-const codeHash = sha(Buffer.concat(CODE.map(f => fs.readFileSync(R(f)))));
-const mHash = sha(fs.readFileSync(R('data/merged.js'))), lHash = sha(fs.readFileSync(R('data/legacy.js')));
-const win = {}; vm.runInNewContext(fs.readFileSync(R('data/merged.js'), 'utf8'), { window: win });
-const build = win.MERGED.build, latest = win.MERGED.default;
+  const CODE = ['app.css', 'sim.css', 'ui-kit.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js'];
+  const LAZY = ['graph.js', 'viz.js', 'topo.js', 'sim.js'];
+  const codeHash = sha(CODE.map(f => text(path.join(root, f))).join(''));
+  const mHash = sha(text(path.join(data, 'merged.js'))), lHash = sha(text(path.join(data, 'legacy.js')));
+  const win = {}; vm.runInNewContext(text(path.join(data, 'merged.js')), { window: win });
+  const build = win.MERGED.build, latest = win.MERGED.default;
 
-let html = fs.readFileSync(R('index.html'), 'utf8');
-html = html.replace(/((?:app|sim)\.css|(?:ui-kit|search|core|views|palette|boot)\.js)\?v=[\w.-]+/g, `$1?v=${codeHash}`)
-  .replace(/data\/merged\.js\?v=[\w.-]+/, `data/merged.js?v=${mHash}`).replace(/data\/legacy\.js\?v=[\w.-]+/, `data/legacy.js?v=${lHash}`);
-fs.writeFileSync(R('index.html'), html);
+  let html = text(path.join(root, 'index.html'));
+  html = html.replace(/((?:app|sim)\.css|(?:ui-kit|search|endpoints|core|views|palette|boot)\.js)\?v=[\w.-]+/g, `$1?v=${codeHash}`)
+    .replace(/data\/merged\.js\?v=[\w.-]+/, `data/merged.js?v=${mHash}`).replace(/data\/legacy\.js\?v=[\w.-]+/, `data/legacy.js?v=${lHash}`);
+  fs.writeFileSync(path.join(out, 'index.html'), html);
 
-// 사전 캐시 목록: index.html 이 참조하는 같은 출처 자원 + 지연 로딩 코드 + 기본 버전 핵심 데이터
-const refs = [...html.matchAll(/(?:href|src)="([^"#]+)"/g)].map(m => m[1]).filter(u => !/^(https?:|data:|\/\/)/.test(u));
-const pre = [...new Set(['./'].concat(refs, LAZY.map(f => `${f}?v=${codeHash}`), [`data/${latest}.js?v=${build}`, `data/${latest}.fidx.js?v=${build}`]))];
+  // 사전 캐시 목록: index.html 이 참조하는 같은 출처 자원 + 지연 로딩 코드 + 기본 버전 핵심 데이터
+  const refs = [...html.matchAll(/(?:href|src)="([^"#]+)"/g)].map(m => m[1]).filter(u => !/^(https?:|data:|\/\/)/.test(u));
+  const pre = [...new Set(['./'].concat(refs, LAZY.map(f => `${f}?v=${codeHash}`), [`data/${latest}.js?v=${build}`, `data/${latest}.fidx.js?v=${build}`]))];
 
-const sw = `/* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = '${codeHash}-${build}';
-const CACHE = 'api-book-' + BUILD;
+  const sw = `/* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
+const BUILD = '${codeHash}-${build}-${sha(html)}';
+const PREFIX = 'api-book:' + encodeURIComponent(self.registration.scope) + ':';
+const CACHE = PREFIX + BUILD;
 const PRECACHE = ${JSON.stringify(pre, null, 2)};
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(CACHE);
-    const r = await Promise.allSettled(PRECACHE.map(u => c.add(new Request(u, { cache: 'reload' }))));
-    const bad = r.filter(x => x.status === 'rejected').length; if (bad) console.warn('[sw] 사전 캐시 실패', bad, '개 — 온라인에서 필요할 때 받습니다');
+    await c.addAll(PRECACHE.map(u => new Request(u, { cache: 'reload' })));
   })());
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if ((k.startsWith('api-book-') || k.startsWith('ocp-api-book-')) && k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });
 self.addEventListener('fetch', e => {
   const r = e.request; if (r.method !== 'GET') return;
   const u = new URL(r.url); if (u.origin !== location.origin) return;
-  if (r.mode === 'navigate') {   // HTML 은 네트워크 우선(새 배포를 바로 받음), 오프라인이면 캐시
-    e.respondWith(fetch(r).then(res => { if (res.ok) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(u.origin + u.pathname, cp)); } return res; })
-      .catch(() => caches.match(u.origin + u.pathname).then(h => h || caches.match(new URL('./', location.href).href)).then(h => h || Response.error())));
+  if (r.mode === 'navigate') {
+    // Keep the offline HTML paired with the assets of this successfully installed worker.
+    e.respondWith(fetch(r).catch(() => caches.match(self.registration.scope, { cacheName: CACHE }).then(h => h || Response.error())));
     return;
   }
   // 코드·데이터는 ?v= 해시가 URL 에 들어 있어 내용이 바뀌면 URL 도 바뀐다 → 캐시 우선
-  e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(res => {
+  e.respondWith(caches.match(r, { cacheName: CACHE }).then(hit => hit || fetch(r).then(res => {
     if (res.ok && u.search.includes('v=')) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
     return res;
   })));
 });
 `;
-fs.writeFileSync(R('sw.js'), sw);
-console.log(JSON.stringify({ codeHash, merged: mHash, legacy: lHash, dataBuild: build, precache: pre.length }));
+  fs.writeFileSync(path.join(out, 'sw.js'), sw);
+  console.log(JSON.stringify({ codeHash, merged: mHash, legacy: lHash, dataBuild: build, precache: pre.length }));
+  return ['index.html', 'sw.js'].map(name => [path.join(out, name), path.join(root, name)]);
+}
+if (require.main === module) {
+  require('./publish').withPublication(ROOT, work => stageStamps(ROOT, path.join(ROOT, 'data'), work));
+}
+module.exports = { stageStamps };

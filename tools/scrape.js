@@ -106,9 +106,10 @@ async (page) => {
         for (const h of es.querySelectorAll('h4,h5')) {
           const path = nb(h.innerText).trim().replace(/^[\d.]+\s*/, '');
           let t = bodyText(h, 'h4,h5'); if (!/Table [\d.]+\./.test(t)) t = nb(h.closest('section').innerText);
-          const blocks = t.split(/(?:^|\n)HTTP method\s*\n/).slice(1);
+          const [preamble, ...blocks] = t.split(/(?:^|\n)HTTP method\s*\n/);
+          const common = preamble.match(/Table [\d.]+\. Global query parameters[\s\S]*?(?=\nTable [\d.]+\.|$)/i)?.[0] || '';
           const ms = blocks.map(b => {
-            const ln = b.split('\n');
+            const ln = (b + '\n' + common.replace(/Global query parameters/i, 'Query parameters')).split('\n');
             const m = ln[0].trim(); const di = ln.findIndex(l => /^Description$/.test(l.trim()));
             const d = di >= 0 ? (ln[di + 1] || '').trim() : '';
             const lines = ln.map(l => l.trim()).filter(l => l && l !== 'Show more' && l !== 'Show less' && l !== 'Expand');
@@ -126,7 +127,7 @@ async (page) => {
               else if (/^Table [\d.]+\. Body parameters/.test(lines[i])) { i += 2; bodyT.push(lines[i + 1] || ''); i += 2; while (i < lines.length && !/^Table /.test(lines[i])) i++; i--; }
               else if (/^Table [\d.]+\. HTTP responses/.test(lines[i])) { i += 2; while (i < lines.length && !/^Table /.test(lines[i])) { resp.push([lines[i], lines[i + 1] || '']); i += 2; } i--; }
             }
-            return { m, d, q, b: bodyT[0] || '', r: resp };
+            return { m, d, q: [...new Set(q)], b: bodyT[0] || '', r: resp };
           });
           out.eps.push({ p: path, ms });
         }

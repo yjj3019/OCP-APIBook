@@ -1,10 +1,10 @@
 # API Book
 
 Kubernetes 계열 컨테이너 플랫폼의 API 문서를 모아 만든, 검색 가능한 **API 레퍼런스 북**입니다.
-데이터는 공개된 OpenShift Container Platform 4.22 / 4.21 / 4.20 API 문서(Apache License 2.0)에서 수집했습니다.
+데이터는 공개된 OpenShift Container Platform 5.0 / 4.22 / 4.21 / 4.20 API 문서(Apache License 2.0)에서 수집했습니다.
 **배포 주소: <https://yjj3019.github.io/OCP-APIBook/>**
 
-원본: <https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html-single/api_overview/index>
+[5.0 공식 API 문서](https://docs.redhat.com/en/documentation/openshift_container_platform/5.0/html/api_overview/index) · [버전별 원본 페이지와 수집 경로](tools/refresh/sources.json)
 
 외부 서버나 빌드 도구 없이 정적 파일만으로 동작합니다(Node.js는 로컬 서버용).
 
@@ -28,11 +28,11 @@ node serve.js 9000 --host 0.0.0.0   # 같은 네트워크의 다른 기기에서
 
 같은 데이터를 MCP(Model Context Protocol) 서버로도 쓸 수 있습니다. 서버 이름은 `api-book` 입니다. 의존성 없이 `node` 만 있으면 되고, 읽기 전용이며 네트워크·클러스터에 접근하지 않습니다(stdio).
 
-```
-claude mcp add api-book -- node /경로/OCP-APIBook/mcp/server.js
-```
+Claude Code에서는 Node.js가 설치된 환경에서 이 저장소의 루트 디렉터리를 열고 `claude`를 실행합니다. 프로젝트 설정 [`.mcp.json`](.mcp.json)에 `api-book`이 등록되어 있습니다. 처음 연결할 때 승인 요청이 표시되면 서버 이름을 확인하세요. `/mcp`에서 연결 상태를 볼 수 있습니다.
 
-다른 클라이언트는 설정에 `{"command": "node", "args": ["/경로/OCP-APIBook/mcp/server.js"]}` 를 넣으면 됩니다.
+다른 AI 클라이언트가 로컬 MCP(stdio)를 지원하면 서버 이름은 `api-book`, 실행 명령은 `node`, 인자는 이 저장소의 `mcp/server.js` 절대 경로로 지정합니다. 클라이언트가 서버 프로세스를 시작합니다. API 키나 클러스터 자격 증명은 필요하지 않습니다.
+
+연결 후 “API Book에서 4.22 Route의 `spec.tls` 하위 필드와 필수 여부를 알려줘”라고 물어보세요. AI는 `get_fields`에 `{"api":"route.openshift.io/Route","version":"4.22","path":"spec.tls"}`를 전달해 필드명·타입·설명을 조회할 수 있습니다.
 
 | 도구 | 역할 |
 |---|---|
@@ -41,10 +41,26 @@ claude mcp add api-book -- node /경로/OCP-APIBook/mcp/server.js
 | `get_api` | 설명, 제공 버전, 호환성 레벨, 엔드포인트, 최상위 필드 |
 | `get_fields` | 중첩 필드 상세(`spec.tls`, 배열은 `spec.rules[]`) |
 | `get_constraints` | 제약·제한 사항과 적용 버전 |
-| `compare_versions` | 4.20 / 4.21 / 4.22 사이 필드·타입·필수·엔드포인트 차이 |
+| `compare_versions` | 수록 버전 사이 필드·타입·필수·엔드포인트 차이 |
 | `generate_manifest` | 필수 필드만 채운 YAML 뼈대 |
 
 `node mcp/smoke.js` 로 stdio 왕복 테스트를 돌릴 수 있습니다. 제약 사항은 웹 화면과 같은 추출 결과라서 같은 한계가 있습니다.
+
+## AI 스킬
+
+Claude Code, Codex, Grok Build에서 같은 [OpenShift API Book 스킬](skills/ocp-api-book/SKILL.md)을 사용할 수 있습니다. 저장소 루트에서 `node tools/install-api-skill.js`를 한 번 실행하면 사용자 스킬 폴더에서 이 체크아웃을 참조하므로 다른 프로젝트에서 코딩할 때도 조회할 수 있습니다. 체크아웃은 설치한 위치에 유지하세요.
+
+| 클라이언트 | 설치 경로 | 직접 호출 |
+|---|---|---|
+| Claude Code | `~/.claude/skills/ocp-api-book` (사용자 지정 `CLAUDE_CONFIG_DIR` 지원) | `/ocp-api-book` |
+| Codex CLI·IDE | `~/.agents/skills/ocp-api-book` | `$ocp-api-book` |
+| Grok Build CLI | Codex와 같은 `~/.agents/skills/ocp-api-book` | `/ocp-api-book` |
+
+“OpenShift 4.22에서 Route에 edge TLS를 설정하는 Helm 템플릿을 작성해줘”처럼 요청하면 에이전트가 작업에 맞춰 스킬을 선택할 수 있습니다. MCP가 연결돼 있으면 해당 도구를 사용하고, 로컬에서는 Node.js로 같은 카탈로그를 조회합니다.
+
+```sh
+node skills/ocp-api-book/scripts/query.cjs get_fields api=route.openshift.io/Route version=4.22 path=spec.tls
+```
 
 ## 기능
 
@@ -60,12 +76,12 @@ claude mcp add api-book -- node /경로/OCP-APIBook/mcp/server.js
 ## 배포 절차
 
 ```
-node build.js && node tools/test-build.js && node tools/stamp.js
+node build.js && node tools/test-build.js
 ```
 
-코드·CSS·데이터를 고친 뒤에는 `tools/stamp.js` 로 `?v=` 해시와 `sw.js` 를 다시 만들어야 합니다. 잊으면 GitHub Actions 배포가 "스탬프가 최신이 아님" 오류로 멈춥니다(배포 전에 문법 검사·스탬프 확인·MCP 스모크 테스트를 돌립니다).
+데이터 빌드는 스탬프도 함께 갱신합니다. 코드·CSS만 고친 뒤에는 `tools/stamp.js` 로 `?v=` 해시와 `sw.js` 를 다시 만들어야 합니다. 잊으면 GitHub Actions 배포가 "스탬프가 최신이 아님" 오류로 멈춥니다(배포 전에 문법 검사·스탬프 확인·MCP 스모크 테스트를 돌립니다).
 
-`build.js` 와 `tools/test-build.js` 는 수집 원본(`_scrape/`, 저장소에 포함하지 않음)이 있어야 돌아갑니다. 원본은 `node tools/scrape.js` 로 다시 수집합니다(Playwright 필요). 일부 버전만 빌드하는 것은 지원하지 않습니다.
+API 문서 현행화는 `npm ci --prefix tools/refresh` 후 `python tools/refresh/run.py`로 실행합니다. 등록된 릴리스의 공식 문서 원본을 수집하고 전체 카탈로그를 검증·재생성합니다. 출처와 자동 실행 주기는 [수집 안내](tools/README.md)에서 확인할 수 있습니다.
 
 서비스 워커는 새 버전을 받아도 열린 탭을 모두 닫거나 새로 열었을 때 바뀝니다(열린 탭의 옛 코드와 섞이지 않게).
 
@@ -92,7 +108,7 @@ node build.js && node tools/test-build.js && node tools/stamp.js
 
 ## 보안과 운영
 
-- **서버**: 기본은 로컬 전용(`127.0.0.1`)이며 `Host` 헤더를 검사합니다(DNS rebinding 방어). 앱이 쓰는 파일(루트 직하 파일과 `data/` 하위)만 허용 목록으로 서빙하고 `tools/`, `_scrape/`, 숨김 파일, 개발용 파일은 대소문자·경로 우회와 무관하게 거부합니다. 압축 캐시는 96MB로 제한되고 타임아웃·연결 수 제한이 있습니다.
+- **서버**: 기본은 로컬 전용(`127.0.0.1`)이며 `Host` 헤더를 검사합니다(DNS rebinding 방어). Pages와 공유하는 공개 파일 목록과 `data/`의 카탈로그 파일명 규칙으로 서빙 대상을 제한하고 `tools/`, `_scrape/`, 숨김 파일, 개발용 파일은 대소문자·경로 우회와 무관하게 거부합니다. 압축 캐시는 96MB로 제한되고 타임아웃·연결 수 제한이 있습니다.
 - **CSP**: 서버가 `script-src 'self'`, `font-src 'none'` 등 엄격한 Content-Security-Policy 를 보냅니다. `index.html` 에도 같은 정책이 `<meta>` 로 들어 있어 정적 호스팅에서도 적용됩니다(이 경우 `frame-ancestors` 는 적용되지 않음). 인라인 스크립트와 이벤트 핸들러는 쓰지 않습니다.
 - **원문 HTML**: 가이드 본문은 허용 태그·속성만 남기고 렌더링합니다.
 - **캐시**: 모든 파일은 ETag 로 재검증합니다. `data/` 파일은 `merged.js` 의 `build` 해시를 `?v=` 로 붙여 요청하므로(데이터가 바뀌면 값이 바뀜) 장기 캐시(immutable)가 안전합니다.
@@ -115,7 +131,7 @@ node build.js && node tools/test-build.js && node tools/stamp.js
 ## 데이터 출처와 한계
 
 - API 설명·필드·엔드포인트는 위 원본 문서에서 수집했습니다. 설명은 원문(영문)이며, 상표 이름만 위와 같이 일반 명칭으로 바꿨습니다.
-- **제약·제한 사항은 설명 문장에서 정규식으로 추출**합니다(`tools/cons-rules.js`). 화면·MCP에 나가는 고유 문장 1,130개는 모두 사람이(또는 에이전트가 문장마다) 판정한 기준선(`tools/cons-audited.json`)에 있고, 오탐은 `tools/cons-deny.json`, 유형 오류는 `tools/cons-retype.json` 으로 바로잡았습니다. 원문을 다시 수집하거나 규칙을 바꾸면 `node tools/cons-audit.js` 가 새(미검토) 문장만 보여 주며, 배포 CI 는 `--strict` 로 미검토 문장이 있으면 멈춥니다. 정규식 추출이라 일부 제약은 여전히 빠질 수 있고(특히 긴 문장 안의 제약), 정확한 내용은 원문을 확인하세요.
+- **제약·제한 사항은 설명 문장에서 정규식으로 추출**합니다(`tools/cons-rules.js`). 화면·MCP에 나가는 고유 문장은 모두 사람이(또는 에이전트가 문장마다) 판정한 기준선(`tools/cons-audited.json`)에 있고, 오탐은 `tools/cons-deny.json`, 유형 오류는 `tools/cons-retype.json` 으로 바로잡았습니다. 원문을 다시 수집하거나 규칙을 바꾸면 `node tools/cons-audit.js` 가 새(미검토) 문장만 보여 주며, 배포 CI 는 `--strict` 로 미검토 문장이 있으면 멈춥니다. 정규식 추출이라 일부 제약은 여전히 빠질 수 있고(특히 긴 문장 안의 제약), 정확한 내용은 원문을 확인하세요.
 - 토폴로지의 **"일반 관계"(점선)** 는 문서에서 추출한 것이 아니라 Kubernetes 계열 플랫폼의 일반적인 구조를 바탕으로 정리한 것입니다.
 - 사용 예시(YAML, `oc`, REST)는 이름·그룹/버전·필수 필드로 만든 기본 틀입니다.
 - 시뮬레이터의 검증과 가상 응답은 문서의 스키마 규칙만 사용합니다. 어드미션 웹훅, 기본값 적용, RBAC, 실제 충돌 검사는 반영하지 않습니다. "허용 값" 경고는 설명 문장에서 뽑은 힌트라 틀릴 수 있습니다.

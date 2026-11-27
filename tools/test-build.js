@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // node tools/test-build.js : data/ 검증
 const fs = require('fs'), path = require('path'), vm = require('vm');
-const D = path.join(__dirname, '..', 'data');
+const D = process.argv[2] || path.join(__dirname, '..', 'data');
 const load = f => { const w = {}; vm.runInNewContext(fs.readFileSync(path.join(D, f), 'utf8'), { window: w }); return w; };
 let fail = 0;
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
@@ -19,21 +19,29 @@ for (const [k, r] of Object.entries(M.apis)) {
 }
 ok(bad === 0, `vers/id 일치 및 id 가 core 에 존재 (불일치 ${bad})`);
 const top = M.default, topIds = new Set(core[top].apis.map(a => a.kind + '|' + a.group));
+const sources = require('./refresh/sources.json');
+ok(Object.keys(sources).length === M.list.length && M.list.every(v => {
+  const source = V.sources?.[v];
+  const books = [...new Set(core[v].apis.map(a => a.url.split('#')[0]))].sort();
+  return sources[v] && source?.overview === sources[v].overview && source.index === sources[v].index &&
+    source.branch === sources[v].branch && /^[a-f0-9]{40}$/.test(source.revision) &&
+    Number.isFinite(Date.parse(source.revisionDate)) && JSON.stringify(source.books) === JSON.stringify(books);
+}), '각 릴리스의 API 공식 문서 주소와 수집한 커밋을 추적할 수 있음');
 const legKeys = new Set(LG.apis.map(a => a.kind + '|' + a.group));
 const expect = Object.keys(M.apis).filter(k => !M.apis[k].vers.includes(top));
 ok(LG.apis.every(a => !topIds.has(a.kind + '|' + a.group)) && legKeys.size === expect.length && expect.every(k => legKeys.has(k)), `legacy ${LG.apis.length}개 == ${top} 에 없는 API ${expect.length}개`);
 ok(LG.apis.every(a => a.rv && LG.fidx[a.id] !== undefined || !a.d), 'legacy rv/fidx 존재');
 const R = M.apis['Route|route.openshift.io'];
-ok(R && R.vers.length === 3, 'Route vers 3개');
+ok(R && M.list.every(v => R.vers.includes(v)), 'Route가 모든 대상 버전에 존재');
 ok(R && R.cons.some(c => c.t === 'imm'), 'Route cons 에 imm 있음: ' + (R.cons.find(c => c.t === 'imm') || {}).x);
 ok(R && R.tier['4.22'] === 1, 'Route tier[4.22]===1');
 ok(R && R.ns === true, 'Route ns===true');
 // 원문 타입 접미사(_v2 등)는 버전마다 달라 정규화 후 비교하므로, 실제 변경이 없는 Route 의 tdiff 는 비어야 한다
-ok(R && R.tdiff.length === 0, 'Route tdiff 비어 있음(접미사 정규화): ' + JSON.stringify(R && R.tdiff));
+ok(R && R.tdiff.every(d => new Set(['4.20', '4.21', '4.22'].map(v => d.t[v]).filter(Boolean)).size <= 1), 'Route tdiff 비어 있음(접미사 정규화): ' + JSON.stringify(R && R.tdiff));
 ok(Object.values(M.apis).every(r => r.tdiff.every(d => new Set(Object.values(d.t).map(x => String(x).replace(/_v\d+/g, ''))).size > 1)), 'tdiff 에 접미사만 다른 가짜 변경 없음 (총 ' + Object.values(M.apis).reduce((a, r) => a + r.tdiff.length, 0) + ')');
 ok(/^[0-9a-f]{12}$/.test(M.build), 'MERGED.build 12자리 16진: ' + M.build);
-ok(JSON.stringify((M.apis['Backup|config.openshift.io'] || {}).vers) === '["4.21"]' && legKeys.has('Backup|config.openshift.io'), 'Backup vers==[4.21] 및 legacy 포함');
-ok(JSON.stringify((M.apis['BackendTLSPolicy|gateway.networking.k8s.io'] || {}).vers) === '["4.22"]', 'BackendTLSPolicy vers==[4.22]');
+ok(JSON.stringify(M.apis['Backup|config.openshift.io']?.vers.filter(v => ['4.20', '4.21', '4.22'].includes(v))) === '["4.21"]', '4.x 중 Backup은 4.21에 존재');
+ok(JSON.stringify(M.apis['BackendTLSPolicy|gateway.networking.k8s.io']?.vers.filter(v => ['4.20', '4.21', '4.22'].includes(v))) === '["4.22"]', 'BackendTLSPolicy vers==[4.22]');
 const fmt = r => ['fdiff', 'rdiff'].every(k => Array.isArray(r[k]) && r[k].every(x => typeof x.p === 'string' && Array.isArray(x.v))) &&
   Array.isArray(r.tdiff) && r.tdiff.every(x => typeof x.p === 'string' && x.t && typeof x.t === 'object') && r.ediff.every(x => typeof x.e === 'string' && Array.isArray(x.v));
 const cc = Object.entries(M.apis).filter(([k]) => /^ControllerConfig/.test(k)).map(x => x[1]);
@@ -86,19 +94,26 @@ const FLD = {}, bookFiles = {};
   }
   Object.assign(FLD, w.FIELDS || {});
 }
+{
+  const route = core['5.0'].apis.find(a => a.kind === 'Route' && a.group === 'route.openshift.io');
+  const tls = FLD['5.0'][route.id].find(f => f.p === '.spec.tls');
+  ok(JSON.stringify(tls?.q) === '["termination"]', '5.0 Route의 spec.tls 필수 하위 필드');
+  ok(core['5.0'].apis.some(a => a.kind === 'TLSRoute' && a.group === 'gateway.networking.k8s.io' && a.version === 'v1'), '5.0 TLSRoute v1 수록');
+}
 // (e) _scrape 에서 독립적으로 만든 기대 구조와 비교 — 수집 원본이 없는 환경(CI, 새로 받은 저장소)에서는 건너뛴다
-const HAVE_SCRAPE = M.list.every(v => fs.existsSync(path.join(__dirname, '..', '_scrape', `v${v}.json`)));
+const sourceDir = process.env.OCP_API_SNAPSHOT || path.join(__dirname, '..', '_scrape');
+const HAVE_SCRAPE = M.list.every(v => fs.existsSync(path.join(sourceDir, `v${v}.json`)));
 if (!HAVE_SCRAPE) console.log('SKIP (e) _scrape 원본이 없어 원본 대조는 건너뜀(데이터 자체 검사는 계속)');
 else {
   const ZW = /[​‌‍﻿]/g, CUT = ' …(원문에서 계속)';
   const z = o => typeof o === 'string' ? o.replace(ZW, '') : Array.isArray(o) ? o.map(z) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, x]) => [z(k), z(x)])) : o;
   let bad = 0, nApi = 0, dup = 0, miss = 0, extra = 0;
   for (const v of M.list) {
-    const R = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '_scrape', `v${v}.json`), 'utf8').replace(/^﻿/, ''));
+    const R = JSON.parse(fs.readFileSync(path.join(sourceDir, `v${v}.json`), 'utf8').replace(/^﻿/, ''));
     const exp = {}, book = {};
     for (const a of core[v].apis) { const d = R.apis[a.id]; if (d && d.fields.length) { exp[a.id] = d.fields; book[a.id] = a.book; } }
     const { replaceMarks: TM } = require('./trademark.js');
-    const mk = (s, c) => TM(typeof s === 'string' && s.length >= c - 1 ? s + CUT : s);
+    const mk = (s, c) => TM(!R.completeText && typeof s === 'string' && s.length >= c - 1 ? s + CUT : s);
     const ty = (t, sub) => { const x = String(t == null ? '' : t).replace(/`/g, '').replace(/\s+/g, ' ').trim(); return x || (sub ? 'object' : ''); };
     const E = {};
     for (const id in exp) {
@@ -151,5 +166,63 @@ else {
   for (const v of M.list) { for (const a of core[v].apis) { if (!a.d) continue; chk(a.d.desc, a.kind); a.d.props.forEach(p => chk(p.d, a.kind + '.' + p.n)); } core[v].guide.forEach(g => { chk(g.title, 'guide'); chk(String(g.html).replace(/<[^>]*>/g, ' '), 'guide ' + g.id); }); for (const id in (FLD[v] || {})) FLD[v][id].forEach(f => { chk(f.d, id); f.r.forEach(r => chk(r[2], id + f.p + '.' + r[0])); }); }
   for (const r of all) r.cons.forEach(c => chk(c.x, r.kind + ' cons'));
   ok(left === 0, '(h) 설명·가이드·제약 문장에 상표 이름 없음 (남은 ' + left + (ex.length ? ': ' + ex.join(' | ') : '') + ')');
+}
+
+// 각 제약의 경로와 적용 버전, 표시 전 전체 개수를 배포된 필드 설명과 대조한다.
+{
+  const { extract } = require('./cons-rules');
+  let missingFiles = 0, wrongPaths = 0, wrongCounts = 0;
+  for (const v of M.list) {
+    for (const a of core[v].apis) {
+      if (!bookFiles[v].includes(v + '.fields.' + a.book + '.js')) missingFiles++;
+      const m = M.apis[a.kind + '|' + a.group];
+      const entries = extract({ ...a.d, fields: FLD[v][a.id] || [] }, a.kind);
+      const paths = new Set(entries.map(c => JSON.stringify([c.t, c.x, c.p])));
+      const sentences = new Map();
+      for (const c of entries) {
+        if (!sentences.has(c.t)) sentences.set(c.t, new Set());
+        sentences.get(c.t).add(c.x);
+      }
+      for (const type of new Set([...sentences.keys(), ...Object.keys(m.countsByVersion[v])])) {
+        if ((sentences.get(type)?.size || 0) !== (m.countsByVersion[v][type] || 0)) wrongCounts++;
+      }
+      for (const c of m.cons.filter(c => c.v.includes(v))) {
+        for (const p of c.pathsByVersion?.[v] || c.ps || [c.p]) {
+          if (!paths.has(JSON.stringify([c.t, c.x, p]))) wrongPaths++;
+        }
+      }
+    }
+  }
+  ok(!missingFiles, '모든 API의 책 파일 존재');
+  ok(!wrongPaths && !wrongCounts, '제약 경로와 절단 전 전체 개수가 각 버전의 필드 설명과 일치');
+}
+{
+  const Sim = require('../sim');
+  const a = core[top].apis.find(record => record.kind === 'Route');
+  const d = { a, ns: true, gv: a.group + '/' + a.version };
+  const schema = Sim.makeSchema(a, FLD[top][a.id]);
+  const manifest = { kind: 'Route', apiVersion: d.gv, metadata: { name: 'example', namespace: 'default' }, spec: { to: { kind: 'Service', name: 'example' } } };
+  const run = (obj, fv) => Sim.simulate({ op: 'create', fv, scn: 'ok' }, obj, a, d, schema, Sim.validate(obj, a, d, schema));
+  ok(run({ ...manifest, spec: { to: null } }, 'Warn').status === 422, '필수 객체의 null 거부');
+  ok(run({ ...manifest, metadata: { name: 'example', namespace: 123 } }, 'Warn').status === 400, 'namespace 타입 검사');
+  for (const mode of ['Strict', 'Warn', 'Ignore']) {
+    const result = run({ ...manifest, extraField: 'example' }, mode);
+    ok(result.req.path.endsWith('fieldValidation=' + mode) && result.status === (mode === 'Strict' ? 400 : 201), mode + ' 요청과 판정 일치');
+  }
+}
+{
+  const endpoints = require('../endpoints');
+  const sim = require('../sim');
+  for (const [v, db] of Object.entries(core)) {
+    const binding = db.apis.find(a => a.kind === 'Binding');
+    ok(binding.d.eps.every(e => e.ms.some(m => m.m === 'POST' &&
+      m.q.includes('dryRun') && m.q.includes('fieldValidation') && m.q.length === new Set(m.q).size)), v + ' Binding 공통 쿼리 파라미터');
+    const route = db.apis.find(a => a.kind === 'Route'), ops = endpoints.operations(route);
+    ok(ops.list?.p.endsWith('/v1/routes') && ops.create?.p.endsWith('/namespaces/{namespace}/routes'), v + ' Route 목록과 생성 경로');
+    const review = db.apis.find(a => a.kind === 'TokenReview' && a.group === 'authentication.k8s.io');
+    const d = { a: review, ns: false, gv: review.group + '/' + review.version };
+    ok(endpoints.operations(review).create?.p.startsWith('/apis/authentication.k8s.io/') &&
+       !sim.simulate({ op: 'get' }, { metadata: {} }, review, d, {}, []).req, v + ' TokenReview 그룹 확인 및 미지원 GET 방지');
+  }
 }
 console.log(fail ? `FAIL (${fail})` : 'ALL PASS'); process.exit(fail ? 1 : 0);

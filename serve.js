@@ -13,9 +13,9 @@ const T = 'text/', U = '; charset=utf-8';
 const MIME = { '.html': T + 'html' + U, '.js': T + 'javascript' + U, '.css': T + 'css' + U, '.json': 'application/json' + U,
   '.svg': 'image/svg+xml' + U, '.txt': T + 'plain' + U, '.md': T + 'markdown' + U, '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']);
-// 허용 목록: "루트 직하 파일(확장자 허용) + data/ 하위"만 서빙. 그 밖의 폴더(tools, _scrape, node_modules, .git ...)는 이름과 무관하게 거부.
+// Pages와 동일한 공개 파일 및 데이터 카탈로그만 서비스한다.
 const ROOT_NOEXT = new Set(['LICENSE', 'NOTICE']);                                          // 확장자 없는 공개 문서
-const ROOT_DENY = new Set(['serve.js', 'build.js', 'package.json', 'package-lock.json']);   // 개발용 파일은 서빙 안 함
+const { publicFiles, isDataFile } = require('./tools/site-files.js');
 // 보안 헤더. CSP 는 인라인 스크립트/이벤트 핸들러를 막아 XSS 피해를 줄인다(script-src 에 'unsafe-inline' 금지).
 // style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 글꼴은 사용자 시스템 글꼴만 쓴다(웹 글꼴 없음). base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
@@ -28,10 +28,10 @@ const realpath = p => new Promise(ok => fs.realpath.native(p, (e, r) => ok(e ? n
 function allowed(real) {
   const rel = path.relative(ROOT, real);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false; // 루트 밖(정션/심볼릭 링크 포함)
-  const parts = rel.split(path.sep), name = parts[parts.length - 1], ext = path.extname(name).toLowerCase();
+  const parts = rel.split(path.sep), name = parts[parts.length - 1];
   if (parts.some(s => s.startsWith('.'))) return false;
-  if (parts.length === 1) return !ROOT_DENY.has(name) && (ROOT_NOEXT.has(name) || ext in MIME);
-  return parts[0] === 'data' && ext in MIME;
+  if (parts.length === 1) return publicFiles.has(name);
+  return parts.length === 2 && parts[0] === 'data' && isDataFile(name);
 }
 // URL 경로 -> 실제 파일 경로(허용되지 않거나 없으면 null). 디렉터리는 index.html 로.
 async function resolve(urlPath) {
@@ -80,6 +80,20 @@ function send(res, code, body, extra) {
 }
 const HOST_OK = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
+function encodingFor(header, compressible, small) {
+  if (!header) return 'identity';
+  const quality = new Map();
+  for (const part of header.toLowerCase().split(',')) {
+    const [name, q] = part.trim().split(/\s*;\s*q\s*=\s*/);
+    const value = q === undefined ? 1 : Number(q);
+    quality.set(name, value >= 0 && value <= 1 ? value : 0);
+  }
+  const wildcard = quality.get('*');
+  const score = name => quality.get(name) ?? (name === 'identity' ? (wildcard === 0 ? 0 : 1) : wildcard ?? 0);
+  const order = compressible ? (small ? ['identity', 'br', 'gzip'] : ['br', 'gzip', 'identity']) : ['identity'];
+  return order.filter(name => score(name) > 0).sort((a, b) => score(b) - score(a))[0];
+}
+
 async function handle(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed', { Allow: 'GET, HEAD' });
   if (req.url.length > 2048) return send(res, 414, 'URI Too Long');
@@ -90,7 +104,9 @@ async function handle(req, res) {
   if (!st || !st.isFile()) return send(res, 404, 'Not found');
 
   const ext = path.extname(file).toLowerCase(), accept = req.headers['accept-encoding'] || '';
-  const enc = TEXTUAL.has(ext) && st.size >= 1024 ? (/\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : '') : '';
+  const coding = encodingFor(accept, TEXTUAL.has(ext), st.size < 1024);
+  if (!coding) return send(res, 406, 'Not Acceptable', { Vary: 'Accept-Encoding' });
+  const enc = coding === 'identity' ? '' : coding;
   const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}${enc ? '-' + enc : ''}"`;
   // data/ 파일이 ?v=<해시 12자 이상 16진수> 로 요청되면 내용이 바뀌면 URL 도 바뀌므로 장기 캐시. 그 외는 ETag 재검증.
   const hashed = !DEV && path.relative(ROOT, file).split(path.sep)[0] === 'data' && /(^|&)v=[0-9a-f]{12,}(&|$)/i.test(query);

@@ -302,6 +302,20 @@
         }
         gres.sort((a, b) => b.score - a.score);
       }
+      // An exact field name or suffix may belong to a different release than the representative record.
+      const fieldQuery = rl.replace(/^\./, '');
+      for (const hit of apis) {
+        const record = hit.d.a;
+        if (!record.fieldVersions) continue;
+        const versions = new Set();
+        for (const p of record.fp) {
+          const field = p.toLowerCase();
+          if (field === fieldQuery || field.endsWith('.' + fieldQuery)) {
+            for (const v of record.fieldVersions[p] || record.m.vers) versions.add(v);
+          }
+        }
+        if (versions.size) hit.fieldVersions = record.m.vers.filter(v => versions.has(v));
+      }
       const out = { apis, guide: gres.slice(0, 6), P, relaxed };
       if (rcache.size > 300) rcache.delete(rcache.keys().next().value);
       rcache.set(key, out);
@@ -328,6 +342,15 @@
     return { docs, search, snippet, suggest, highlighter, CAT_KO, stats };
   }
 
-  const api = { create, CAT_KO };
+  function unifiedRecords(current, legacy, merged) {
+    return current.concat(legacy.apis).map(source => {
+      const key = source.kind + '|' + source.group, m = merged.apis[key];
+      const fieldVersions = legacy.fieldVersions?.[key] || {};
+      const paths = source.fp || legacy.fidx[source.id] || [];
+      return { ...source, key, m, rv: source.rv || merged.default,
+        fp: [...new Set([...paths, ...Object.keys(fieldVersions)])], fieldVersions, cons: m.cons };
+    });
+  }
+  const api = { create, CAT_KO, unifiedRecords };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ApiSearch = api;
 })(typeof window !== 'undefined' ? window : globalThis);

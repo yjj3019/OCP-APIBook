@@ -30,6 +30,30 @@ let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ')
   r = await call('generate_manifest', { api: 'ConfigMap', name: 'x\nspec:\n  evil: 1' }); t('name 주입 거부', r.err === true);
   r = await call('generate_manifest', { api: 'Deployment', name: 'web' }); t('Deployment selector/template 틀', !r.err && /matchLabels:/.test(r.out.yaml) && /containers:/.test(r.out.yaml));
   p.stdin.write('null\n"hello"\n[]\n' + JSON.stringify({ jsonrpc: '2.0', method: 'tools/list' }) + '\n');   // 서버가 죽지 않아야 하고, 알림에는 응답하지 않는다
+  r = await call('search_apis', { query: 'mutually exclusive', version: '4.22' });
+  t('제약 문장 검색', !r.err && r.out.total > 0);
+  r = await call('search_apis', { query: 'Backup' });
+  t('구버전 전용 API 통합 검색', r.out.results.some(a => a.kind === 'Backup'));
+  r = await call('search_apis', { query: 'DataGather', version: '4.21' });
+  t('선택한 버전의 검색 식별자', r.out.results.some(a => a.kind === 'DataGather' && a.id.endsWith('v1alpha2') && a.apiVersion.endsWith('/v1alpha2')));
+  r = await call('list_apis', { version: '4.20', has_constraint: 'cond', limit: 300 });
+  t('해당 버전의 제약으로 필터', !r.out.apis.some(a => a.kind === 'AlertmanagerConfig'));
+  r = await call('generate_manifest', { api: 'Deployment', name: '123', namespace: 'true' });
+  const parsed = require('../sim').yamlParse(r.out.yaml)[0];
+  t('YAML 문자열 보존', parsed.metadata.name === '123' && parsed.metadata.namespace === 'true' && parsed.spec.selector.matchLabels.app === '123' && parsed.spec.template.spec.containers[0].name === '123');
+  r = await call('search_apis', { query: 'authoritativeAPI' });
+  t('구버전 필드 통합 검색', ['Machine', 'MachineSet', 'ControlPlaneMachineSet'].every(kind =>
+    r.out.results.some(x => x.kind === kind && x.fieldVersions.includes('4.21') && !x.fieldVersions.includes('5.0'))));
+  const oldId = 'datagather-insights-openshift-io-v1alpha2';
+  r = await call('get_api', { api: 'core/Binding', version: '5.0' });
+  t('엔드포인트 공통 쿼리 인자', !r.err && r.out.endpoints.every(e =>
+    ['dryRun', 'fieldValidation'].every(n => e.queryParametersByMethod.POST.includes(n))));
+  for (const name of ['get_api', 'get_fields', 'generate_manifest']) {
+    r = await call(name, { api: oldId });
+    t(name + ' 정확한 스키마 ID', !r.err && r.out.version === '4.21');
+    r = await call(name, { api: oldId, version: '5.0' });
+    t(name + ' ID와 문서 릴리스 충돌', r.err === true);
+  }
   const alive = await rpc('ping', {}); t('잘못된 줄 뒤에도 살아 있음', alive && alive.result && !alive.error);
   p.stdin.end(); console.log(fail ? `${fail} FAILED` : 'ALL PASS'); process.exit(fail ? 1 : 0);
 })();

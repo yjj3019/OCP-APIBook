@@ -28,9 +28,9 @@
       return { out, P: null, H: s => s };
     }
     const r = E.search(q), P = r.P, H = E.highlighter(P), apis = r.apis.slice(0, 7);
-    if (apis.length) out.push({ g: 'API' }, ...apis.map(x => ({ type: 'api', a: x.d.a, d: x.d, P })));
+    if (apis.length) out.push({ g: 'API' }, ...apis.map(x => ({ type: 'api', a: x.d.a, d: x.d, P, fieldVersions: x.fieldVersions })));
     const fields = [];
-    for (const x of r.apis.slice(0, 30)) { const s = E.snippet(x.d, P); if (s.src === '필드 경로' && fields.length < 4) fields.push({ type: 'field', a: x.d.a, text: s.text }); }
+    for (const x of r.apis.slice(0, 30)) { const s = E.snippet(x.d, P); if (s.src === '필드 경로' && fields.length < 4) fields.push({ type: 'field', a: x.d.a, text: s.text, fieldVersions: x.fieldVersions }); }
     if (fields.length) out.push({ g: '필드' }, ...fields);
     if (r.guide.length) out.push({ g: '가이드' }, ...r.guide.slice(0, 3).map(x => ({ type: 'guide', g2: x.g })));
     const ql = q.toLowerCase(), cmds = commands().filter(c => (c.t + ' ' + c.k).toLowerCase().includes(ql)).slice(0, 4);
@@ -44,10 +44,10 @@
     const sl = `role="option" id="pal-i${i}" data-i="${i}" aria-selected="${i === sel}"`;
     if (it.type === 'cmd') return `<button class="palit" ${sl}><span class="pi">${ic(it.c.i, 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${esc(it.c.t)}</b></span></button>`;
     if (it.type === 'guide') return `<button class="palit" ${sl}><span class="pi">${ic('file-text', 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${App.hlz(it.g2.title, H)}</b><small>가이드</small></span></button>`;
-    const a = it.a, gv = (a.group ? a.group + '/' : '') + a.m.gv[App.pickVer(a.m, App.ver)];
-    if (it.type === 'field') return `<button class="palit" ${sl}><span class="pi">${ic('list', 15)}</span><span class="pt"><b>${esc(a.kind)}</b><small>${App.hlz(it.text, H)}</small></span><span class="pr"><span class="badge mono">필드</span></span></button>`;
-    const at = App.availText(a.m), s = it.d && it.P ? U.E.snippet(it.d, it.P) : { text: App.firstSent(a.d && a.d.desc) };
-    return `<button class="palit" ${sl}><span class="pi">${ic('box', 15)}</span><span class="pt"><b>${App.hlz(a.kind, H)}</b> <span class="gv">${esc(gv)}</span><small>${App.hlz(App.short(s.text, 110), H)}</small></span><span class="pr">${at ? `<span class="cons ver">${esc(at)}</span>` : ''}<span class="badge ${App.stab(a.m.gv[App.pickVer(a.m, App.ver)])}">${App.STAB[App.stab(a.m.gv[App.pickVer(a.m, App.ver)])][0]}</span></span></button>`;
+    const v = App.fieldRelease(it.fieldVersions), a = it.a, gv = (a.group ? a.group + '/' : '') + a.m.gv[App.pickVer(a.m, v || App.ver)];
+    if (it.type === 'field') return `<button class="palit" ${sl}><span class="pi">${ic('list', 15)}</span><span class="pt"><b>${esc(a.kind)}</b><small>${App.hlz(it.text, H)}</small></span><span class="pr"><span class="badge mono">필드 ${it.fieldVersions?.join(" · ") || ""}</span></span></button>`;
+    const at = it.fieldVersions ? "필드 · " + it.fieldVersions.join(" · ") : App.availText(a.m), s = it.d && it.P ? U.E.snippet(it.d, it.P) : { text: App.firstSent(a.d && a.d.desc) };
+    return `<button class="palit" ${sl}><span class="pi">${ic('box', 15)}</span><span class="pt"><b>${App.hlz(a.kind, H)}</b> <span class="gv">${esc(gv)}</span><small>${App.hlz(App.short(s.text, 110), H)}</small></span><span class="pr">${at ? `<span class="cons ver">${esc(at)}</span>` : ''}<span class="badge ${App.stab(a.m.gv[App.pickVer(a.m, v || App.ver)])}">${App.STAB[App.stab(a.m.gv[App.pickVer(a.m, v || App.ver)])][0]}</span></span></button>`;
   }
   let H = s => s;
   function render() {
@@ -69,9 +69,9 @@
     const it = items[i]; if (!it || !it.type) return; close();
     if (it.type === 'cmd') return it.c.run();
     if (it.type === 'guide') return App.nav('guide:' + it.g2.id);
-    const a = it.a, v = App.pickVer(a.m, App.ver);
-    if (mod) return App.nav('sim:' + a.m.id[v]);
-    location.hash = App.hrefFor(a);
+    const a = it.a, want = App.fieldRelease(it.fieldVersions), v = App.pickVer(a.m, want || App.ver);
+    if (mod) { location.hash = '#' + (want || App.ver) + '/sim:' + a.m.id[v]; return; }
+    location.hash = App.hrefFor(a, want);
   }
   App.openPalette = (initial) => {
     if (open) return; open = true; prevFocus = document.activeElement; const b = box(); b.hidden = false;
@@ -139,7 +139,7 @@
     helpPrev = document.activeElement;
     h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="정보와 고지"><div style="display:flex;align-items:center"><h3 style="margin:0">정보 · 고지</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
       <p style="margin-top:14px"><b>${App.NAME}</b>은 <b>비공식</b> 프로젝트입니다. 원문 문서의 저작자·상표권자와 제휴·후원·보증 관계가 없습니다.</p>
-      <p>API 설명·필드·엔드포인트는 Apache License 2.0으로 공개된 4.20~4.22 API 문서에서 수집해 변형했습니다. 원문 라이선스 조건에 따라 설명 문장 속 상표 이름은 중립적인 표현으로 바꿨고, API 그룹·종류 이름(예: <code>route.openshift.io</code>)은 상호운용을 위한 식별자라 그대로 둡니다. 출처, 원문 고지, 변경 사항은 NOTICE에 있습니다.</p>
+      <p>API 설명·필드·엔드포인트는 Apache License 2.0으로 공개된 버전별 API 문서에서 수집해 변형했습니다. 원문 라이선스 조건에 따라 설명 문장 속 상표 이름은 중립적인 표현으로 바꿨고, API 그룹·종류 이름(예: <code>route.openshift.io</code>)은 상호운용을 위한 식별자라 그대로 둡니다. 출처, 원문 고지, 변경 사항은 NOTICE에 있습니다.</p>
       <p>"제약·제한 사항"은 원문 설명에서 자동 추출한 것이라 정확하지 않을 수 있습니다. 중요한 판단은 원문을 확인하세요. "일반 관계"(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.</p>
       <p>글꼴은 사용자 기기의 시스템 글꼴을 씁니다(웹 글꼴을 포함하지 않음).</p>
       <p class="note"><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener noreferrer">저장소 · LICENSE · NOTICE ${ic('external', 12)}</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>

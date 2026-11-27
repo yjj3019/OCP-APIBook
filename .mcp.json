@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "api-book": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp/server.js"]
+    }
+  }
+}

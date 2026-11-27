@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /* API Book MCP 서버 (stdio, 의존성 없음)
  *   node mcp/server.js
- * data/ 의 API 레퍼런스(4.22 / 4.21 / 4.20)를 MCP 도구로 노출한다. 읽기 전용이며 네트워크·클러스터에 접근하지 않는다.
+ * data/ 의 API 레퍼런스를 MCP 도구로 노출한다. 읽기 전용이며 네트워크·클러스터에 접근하지 않는다.
  * 도구: search_apis, get_api, get_fields, get_constraints, compare_versions, list_apis, generate_manifest
  * 프로토콜: JSON-RPC 2.0, 줄 단위(newline-delimited) JSON. 로그는 stderr 로만 남긴다. */
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -10,29 +10,72 @@ const SERVER = { name: 'api-book', version: '1.1.0' };
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
 /* ---------- 데이터 적재 ---------- */
-const ctx = { }; ctx.window = ctx; vm.createContext(ctx);
-const loaded = new Set();
-const load = rel => {
-  if (loaded.has(rel)) return true;
-  const f = path.join(ROOT, 'data', rel);
-  if (!fs.existsSync(f)) return false;
-  vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: rel }); loaded.add(rel); return true;
-};
-load('merged.js');
-const MERGED = ctx.MERGED, LATEST = MERGED.default, VERS = MERGED.list.slice();
 const ApiSearch = require(path.join(ROOT, 'search.js'));
-const MAPIS = Object.values(MERGED.apis);
+const dataFile = rel => path.join(ROOT, 'data', rel);
+const VERS = [];
+let ctx, loaded, MERGED, LATEST, MAPIS, engines, unifiedEngine, generation;
 
-const engines = {};
+function catalogGeneration() {
+  const s = fs.statSync(dataFile('merged.js'), { bigint: true, throwIfNoEntry: false });
+  return s && [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].join('/');
+}
+function selectGeneration(id) {
+  if (id === generation) return;
+  const next = vm.createContext({});
+  next.window = next;
+  vm.runInContext(fs.readFileSync(dataFile('merged.js'), 'utf8'), next);
+  const merged = next.MERGED;
+  const records = Object.values(merged.apis);
+  VERS.splice(0, VERS.length, ...merged.list);
+  ctx = next; MERGED = merged; LATEST = merged.default; MAPIS = records;
+  loaded = new Set(['merged.js']); engines = {}; unifiedEngine = undefined;
+  generation = id;
+}
+function currentCatalog(action) {
+  // Publishing swaps the whole data directory. Discard a result if it changed during a lazy read.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const before = catalogGeneration();
+    if (!before) {
+      // The publisher may be between the two directory renames (notably on Windows).
+      if (attempt < 2) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      continue;
+    }
+    try {
+      selectGeneration(before);
+      const result = action();
+      if (before === catalogGeneration()) return result;
+    } catch (error) {
+      if (before === catalogGeneration()) throw error;
+    }
+    generation = undefined;
+  }
+  throw new Error('카탈로그가 갱신 중입니다. 조회를 다시 시도해 주세요.');
+}
+function load(rel) {
+  if (loaded.has(rel)) return;
+  vm.runInContext(fs.readFileSync(dataFile(rel), 'utf8'), ctx, { filename: rel });
+  loaded.add(rel);
+}
+currentCatalog(() => {});
 function core(v) {
   if (!VERS.includes(v)) throw new Error(`지원하지 않는 버전: ${v} (가능: ${VERS.join(', ')})`);
   if (!engines[v]) {
     load(`${v}.js`); load(`${v}.fidx.js`);
     const db = ctx.DB[v], fi = (ctx.FIDX && ctx.FIDX[v]) || {};
-    db.apis.forEach(a => { a.fp = fi[a.id] || []; if (a.d) a.d.eps.forEach(e => { e.m = e.ms.map(x => x.m + ': ' + x.d); }); });
+    db.apis.forEach(a => { a.cons = MERGED.apis[a.kind + '|' + a.group].cons.filter(c => c.v.includes(v)); a.fp = fi[a.id] || []; if (a.d) a.d.eps.forEach(e => { e.m = e.ms.map(x => x.m + ': ' + x.d); }); });
     engines[v] = { db, byId: new Map(db.apis.map(a => [a.id, a])), E: ApiSearch.create({ guide: db.guide, apis: db.apis }) };
   }
   return engines[v];
+}
+function searchEngine(version) {
+  if (version) return core(version).E;
+  if (!unifiedEngine) {
+    load('legacy.js');
+    const { db } = core(LATEST);
+    const apis = ApiSearch.unifiedRecords(db.apis, ctx.LEGACY, MERGED);
+    unifiedEngine = ApiSearch.create({ guide: db.guide, apis });
+  }
+  return unifiedEngine;
 }
 function fieldsOf(v, a) {
   load(`${v}.fields.${a.book}.js`);
@@ -54,7 +97,12 @@ function resolve(q) {
   if (hit.length > 1) throw new Error(`"${q}" 가 여러 API 와 일치합니다. "group/Kind" 형식으로 지정하세요: ` + hit.map(m => `${m.group || 'core'}/${m.kind}`).join(', '));
   return hit[0];
 }
-function pickVersion(m, v) {
+function pickVersion(m, v, query) {
+  const exact = m.vers.filter(release => m.id[release] === norm(query));
+  if (exact.length) {
+    if (v && !exact.includes(v)) throw new Error(query + ' ID의 제공 버전: ' + exact.join(', '));
+    return v || exact[0];
+  }
   if (v) { if (!m.id[v]) throw new Error(`${m.kind} 는 ${v} 에 없습니다 (제공: ${m.vers.join(', ')})`); return v; }
   return m.vers.includes(LATEST) ? LATEST : m.vers[0];
 }
@@ -65,21 +113,24 @@ const verArg = a => { const v = optStr(a, 'version'); if (v && !VERS.includes(v)
 const cut = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const gvOf = (m, v) => (m.group ? m.group + '/' : '') + m.gv[v];
 const TYPE = { imm: '변경 불가', dep: '폐지 예정', prev: '미리보기/기능 게이트', single: '싱글턴', excl: '상호 배타', cond: '조건부', limit: '값 제한' };
-const brief = m => ({ id: m.id[m.vers[0]], kind: m.kind, group: m.group || 'core', apiVersion: gvOf(m, m.vers[0]), book: m.book, namespaced: m.ns, versions: m.vers, tier: m.tier || undefined, constraints: m.flags });
+const brief = (m, v) => ({ id: m.id[v], kind: m.kind, group: m.group || 'core', apiVersion: gvOf(m, v), book: m.book, namespaced: m.ns, versions: m.vers, tier: m.tier || undefined, constraints: m.countsByVersion[v] });
 
 /* ---------- 도구 ---------- */
-const VER = { type: 'string', enum: VERS, description: `문서 버전 (기본 ${LATEST})` };
+const VER = { type: 'string', enum: VERS, get description() { return `문서 버전 (기본 ${LATEST})`; } };
 const TOOLS = [
-  { name: 'search_apis', description: '컨테이너 플랫폼 API(4.20~4.22 문서, 예: route.openshift.io/Route, apps/Deployment)를 키워드로 검색한다(한글·영문, Kind, 필드 경로, 제약 문장 지원). 같은 API 는 버전과 무관하게 한 번만 나온다.',
-    inputSchema: { type: 'object', properties: { query: { type: 'string', description: '검색어 (예: "route tls termination", "pvc", "spec.tls.termination", "deprecated")' }, limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 }, version: VER }, required: ['query'] },
+  { name: 'search_apis', description: '컨테이너 플랫폼 API(예: route.openshift.io/Route, apps/Deployment)를 키워드로 검색한다(한글·영문, Kind, 필드 경로, 제약 문장 지원). 같은 API 는 버전과 무관하게 한 번만 나온다.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string', description: '검색어 (예: "route tls termination", "pvc", "spec.tls.termination", "deprecated")' }, limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 }, version: { ...VER, description: '생략하면 모든 문서 버전을 통합 검색합니다' } }, required: ['query'] },
     run(a) {
       if (typeof a.query !== 'string' || !a.query.trim()) throw new Error('query 는 비어 있지 않은 문자열이어야 합니다');
-      const v = verArg(a) || LATEST, { E } = core(v), r = E.search(a.query.slice(0, 300), {});
+      const v = verArg(a), r = searchEngine(v).search(a.query.slice(0, 300), {});
       const out = r.apis.slice(0, lim(a.limit, 10, 50)).map(x => {
-        const m = MAPIS.find(y => y.id[v] === x.d.a.id); const o = m ? brief(m) : { id: x.d.a.id, kind: x.d.a.kind };
-        o.summary = cut(x.d.a.d && x.d.a.d.desc, 220); return o;
+        const record = x.d.a, m = MERGED.apis[record.kind + '|' + record.group];
+        const release = v || x.fieldVersions?.[0] || record.rv || LATEST;
+        const o = brief(m, release);
+        if (x.fieldVersions) o.fieldVersions = x.fieldVersions;
+        o.summary = cut(rec(m, release).d?.desc, 220); return o;
       });
-      return { version: v, total: r.apis.length, results: out, relaxed: !!r.relaxed };
+      return { version: v || 'all', total: r.apis.length, results: out, relaxed: !!r.relaxed };
     } },
   { name: 'list_apis', description: 'API 목록을 분류(book)·범위·제약 유형으로 거르거나 개수를 센다.',
     inputSchema: { type: 'object', properties: { book: { type: 'string', description: '분류 (예: network_apis, workloads_apis). 비우면 전체' }, scope: { type: 'string', enum: ['namespaced', 'cluster'] }, has_constraint: { type: 'string', enum: Object.keys(TYPE) }, version: VER, limit: { type: 'integer', default: 100, maximum: 300 } } },
@@ -90,25 +141,26 @@ const TOOLS = [
       let l = MAPIS.filter(m => m.vers.includes(v));
       if (a.book) l = l.filter(m => m.book === a.book);
       if (a.scope) l = l.filter(m => a.scope === 'cluster' ? m.ns === false : m.ns === true);
-      if (a.has_constraint) l = l.filter(m => m.flags && m.flags[a.has_constraint]);
+      if (a.has_constraint) l = l.filter(m => m.countsByVersion[v][a.has_constraint]);
       const books = {}; MAPIS.filter(m => m.vers.includes(v)).forEach(m => { books[m.book] = (books[m.book] || 0) + 1; });
       return { version: v, count: l.length, books, apis: l.slice(0, lim(a.limit, 100, 300)).map(m => ({ id: m.id[v], kind: m.kind, group: m.group || 'core', apiVersion: gvOf(m, v), namespaced: m.ns })) };
     } },
   { name: 'get_api', description: 'API 한 개의 개요: 설명, 제공 버전, 범위, 호환성 레벨, 엔드포인트, 최상위 필드, 제약 요약.',
     inputSchema: { type: 'object', properties: { api: { type: 'string', description: 'Kind, "group/Kind" 또는 id (예: Route, route.openshift.io/Route)' }, version: VER }, required: ['api'] },
     run(a) {
-      const m = resolve(a.api), v = pickVersion(m, verArg(a)), r = rec(m, v), d = r.d || {};
-      return Object.assign(brief(m), {
+      const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v), d = r.d || {};
+      return Object.assign(brief(m, v), {
         version: v, apiVersion: gvOf(m, v), docUrl: r.url, description: cut(d.desc, 1500),
         availability: m.vers.length === VERS.length ? '모든 버전에서 제공' : `제공 버전: ${m.vers.join(', ')} (없는 버전: ${VERS.filter(x => !m.vers.includes(x)).join(', ')})`,
         required: d.required || [], topLevelFields: (d.props || []).filter(p => !/^(apiVersion|kind)$/.test(p.n)).map(p => ({ name: p.n, type: p.t, description: cut(p.d, 200) })),
-        endpoints: (d.eps || []).map(e => ({ path: e.p, methods: e.ms.map(x => `${x.m}: ${x.d}`) })),
+        endpoints: (d.eps || []).map(e => ({ path: e.p, methods: e.ms.map(x => `${x.m}: ${x.d}`),
+          queryParametersByMethod: Object.fromEntries(e.ms.map(x => [x.m, x.q || []])) })),
       });
     } },
   { name: 'get_fields', description: '중첩 필드 상세. path 가 비면 최상위 필드, "spec.tls" 처럼 주면 그 하위 필드(타입·필수·설명)를 돌려준다. 배열 하위는 "spec.rules[]" 형식.',
     inputSchema: { type: 'object', properties: { api: { type: 'string' }, path: { type: 'string', description: '비우면 최상위' }, version: VER }, required: ['api'] },
     run(a) {
-      const m = resolve(a.api), v = pickVersion(m, verArg(a)), r = rec(m, v), p = (optStr(a, 'path') || '').trim().replace(/^\./, '');
+      const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v), p = (optStr(a, 'path') || '').trim().replace(/^\./, '');
       let children, required;
       if (!p) { children = (r.d.props || []).map(x => [x.n, x.t, x.d]); required = r.d.required || []; }
       else {
@@ -127,8 +179,8 @@ const TOOLS = [
     run(a) {
       const m = resolve(a.api);
       if (a.type !== undefined && !TYPE[a.type]) throw new Error('type 은 ' + Object.keys(TYPE).join(', ') + ' 중 하나');
-      const list = (m.cons || []).filter(c => !a.type || c.t === a.type).map(c => ({ type: c.t, typeName: TYPE[c.t], path: c.p || '(API 전체)', alsoAt: c.n ? `${c.n}곳 (예: ${(c.ps || []).slice(0, 3).join(', ')})` : undefined, statement: c.x, versions: c.v }));
-      return { api: `${m.group || 'core'}/${m.kind}`, versions: m.vers, tier: m.tier, counts: m.flags, constraints: list, note: '설명 문장에서 정규식으로 추출한 요약입니다.' };
+      const list = (m.cons || []).filter(c => !a.type || c.t === a.type).map(c => ({ type: c.t, typeName: TYPE[c.t], path: c.p || '(API 전체)', alsoAt: c.n ? `${c.n}곳 (예: ${(c.ps || []).slice(0, 3).join(', ')})` : undefined, statement: c.x, versions: c.v, primaryPathVersions: c.pathsByVersion ? c.v.filter(v => c.pathsByVersion[v].includes(c.p)) : c.v, pathsByVersion: c.pathsByVersion }));
+      return { api: `${m.group || 'core'}/${m.kind}`, versions: m.vers, tier: m.tier, counts: m.constraintTotals || m.flags, shownCounts: m.flags, constraints: list, note: '설명 문장에서 정규식으로 추출한 요약입니다.' };
     } },
   { name: 'compare_versions', description: 'API 의 버전 간 차이(필드 추가/삭제, 타입 변경, 필수 여부 변경, 엔드포인트 변경).',
     inputSchema: { type: 'object', properties: { api: { type: 'string' } }, required: ['api'] },
@@ -141,13 +193,14 @@ const TOOLS = [
   { name: 'generate_manifest', description: '필수 필드만 채운 YAML 뼈대를 만든다(값은 자리표시자). 실제 클러스터에 적용하기 전에 값을 채워야 한다.',
     inputSchema: { type: 'object', properties: { api: { type: 'string' }, version: VER, name: { type: 'string', default: 'example' }, namespace: { type: 'string', default: 'default' } }, required: ['api'] },
     run(a) {
-      const m = resolve(a.api), v = pickVersion(m, verArg(a)), r = rec(m, v), ents = new Map(fieldsOf(v, r).map(x => [x.p, x]));
+      const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v), ents = new Map(fieldsOf(v, r).map(x => [x.p, x]));
       const name = optStr(a, 'name') || 'example', ns = optStr(a, 'namespace') || 'default';
       if (name.length > 253 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/.test(name)) throw new Error('name 은 소문자 RFC 1123 서브도메인이어야 합니다(소문자·숫자·"-"·".", 253자 이하)');
       if (ns.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(ns)) throw new Error('namespace 는 소문자 RFC 1123 라벨이어야 합니다(소문자·숫자·"-", 63자 이하)');
+      const yamlString = require('../sim.js').yamlDump;
       const REF = {   // 문서에 하위 필드가 없는 참조 타입 중 필수로 자주 나오는 것
-        LabelSelector: pad => [`${pad}matchLabels:`, `${pad}  app: ${name}`],
-        PodTemplateSpec: pad => [`${pad}metadata:`, `${pad}  labels:`, `${pad}    app: ${name}`, `${pad}spec:`, `${pad}  containers:`, `${pad}  - name: ${name.split('.')[0]}`, `${pad}    image: "<image>"`],
+        LabelSelector: pad => [`${pad}matchLabels:`, `${pad}  app: ${yamlString(name)}`],
+        PodTemplateSpec: pad => [`${pad}metadata:`, `${pad}  labels:`, `${pad}    app: ${yamlString(name)}`, `${pad}spec:`, `${pad}  containers:`, `${pad}  - name: ${yamlString(name.split('.')[0])}`, `${pad}    image: "<image>"`],
       };
       const lines = [], isArr = t => /^array/i.test(t);
       const ph = t => /^int|^number/i.test(t) ? '0' : /^bool/i.test(t) ? 'false' : /^string/i.test(t) ? '"<string>"' : isArr(t) ? '[]' : '{}' + (/^object$/i.test(t) ? '' : ' # ' + t);
@@ -174,11 +227,16 @@ const TOOLS = [
       };
       const top = (r.d.props || []).filter(p => !/^(apiVersion|kind|metadata|status)$/.test(p.n)).map(p => [p.n, p.t]);
       lines.push(...emit(0, '', top, r.d.required || [], 0));
-      const head = [`apiVersion: ${gvOf(m, v)}`, `kind: ${m.kind}`, 'metadata:', `  name: ${name}`].concat(m.ns ? [`  namespace: ${ns}`] : []);
+      const head = [`apiVersion: ${gvOf(m, v)}`, `kind: ${m.kind}`, 'metadata:', `  name: ${yamlString(name)}`].concat(m.ns ? [`  namespace: ${yamlString(ns)}`] : []);
       const yaml = head.concat(lines).join('\n') + '\n';
       return { api: `${m.group || 'core'}/${m.kind}`, version: v, namespaced: m.ns, yaml, note: '필수 필드만 포함한 뼈대입니다. "<...>" 와 0/false 는 자리표시자이고, 문서에 하위 필드가 없는 참조 타입은 {} 로 남습니다(LabelSelector·PodTemplateSpec 은 기본 틀 제공). 제약은 get_constraints 로 확인하세요.' };
     } },
 ];
+
+for (const tool of TOOLS) {
+  const run = tool.run;
+  tool.run = args => currentCatalog(() => run(args));
+}
 
 /* ---------- JSON-RPC ---------- */
 const send = o => process.stdout.write(JSON.stringify(o) + '\n');
@@ -191,12 +249,13 @@ function handle(msg) {
   if (typeof method !== 'string' || (typeof id !== 'string' && typeof id !== 'number')) return err(id === null || typeof id === 'string' || typeof id === 'number' ? id : null, -32600, 'Invalid Request');
   switch (method) {
     case 'initialize': {
+      currentCatalog(() => {});
       const want = params && params.protocolVersion;
       return ok(id, { protocolVersion: PROTOCOLS.includes(want) ? want : PROTOCOLS[0], capabilities: { tools: { listChanged: false } }, serverInfo: SERVER,
-        instructions: '4.22/4.21/4.20 컨테이너 플랫폼 API 레퍼런스(읽기 전용, 비공식). 먼저 search_apis 로 API 를 찾고 get_api, get_fields, get_constraints, compare_versions 로 자세히 확인하세요.' });
+        instructions: VERS.join('/') + ' 컨테이너 플랫폼 API 레퍼런스(읽기 전용, 비공식). 먼저 search_apis 로 API 를 찾고 get_api, get_fields, get_constraints, compare_versions 로 자세히 확인하세요.' });
     }
     case 'ping': return ok(id, {});
-    case 'tools/list': return ok(id, { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+    case 'tools/list': currentCatalog(() => {}); return ok(id, { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
     case 'tools/call': {
       if (params !== undefined && (typeof params !== 'object' || params === null)) return err(id, -32602, 'params 는 객체여야 합니다');
       const t = TOOLS.find(x => x.name === (params && params.name));

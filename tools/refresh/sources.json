@@ -1,0 +1,22 @@
+{
+  "5.0": {
+    "branch": "enterprise-5.0",
+    "overview": "https://docs.redhat.com/en/documentation/openshift_container_platform/5.0/html-single/api_overview/index",
+    "index": "https://github.com/openshift/openshift-docs/blob/enterprise-5.0/rest_api/overview/index.adoc"
+  },
+  "4.22": {
+    "branch": "enterprise-4.22",
+    "overview": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html-single/api_overview/index",
+    "index": "https://github.com/openshift/openshift-docs/blob/enterprise-4.22/rest_api/overview/index.adoc"
+  },
+  "4.21": {
+    "branch": "enterprise-4.21",
+    "overview": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/html-single/api_overview/index",
+    "index": "https://github.com/openshift/openshift-docs/blob/enterprise-4.21/rest_api/overview/index.adoc"
+  },
+  "4.20": {
+    "branch": "enterprise-4.20",
+    "overview": "https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html-single/api_overview/index",
+    "index": "https://github.com/openshift/openshift-docs/blob/enterprise-4.20/rest_api/overview/index.adoc"
+  }
+}
