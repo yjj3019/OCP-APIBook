@@ -11,13 +11,10 @@ const crypto = require('crypto');
 const read = f => JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''));
 const SRC = process.env.OCP_API_SNAPSHOT || path.join(__dirname, '_scrape');
 
-const all = (fs.existsSync(SRC) ? fs.readdirSync(SRC) : []).map(f => (f.match(/^v(\d+\.\d+)\.json$/) || [])[1]).filter(Boolean);
 const vcmp = (a, b) => { const [x1, y1] = a.split('.').map(Number), [x2, y2] = b.split('.').map(Number); return x2 - x1 || y2 - y1; };   // 내림차순
 if (process.argv.length > 2) { console.error('부분 빌드는 지원하지 않습니다: 통합 데이터(merged/legacy/versions)가 모든 버전을 필요로 합니다. 인자 없이 `node build.js` 로 실행하세요.'); process.exit(1); }
 
 const mandatory = Object.keys(require('./tools/refresh/sources.json'));
-const missingVersions = mandatory.filter(v => !all.includes(v));
-if (missingVersions.length) throw new Error('수집 원본 누락: ' + missingVersions.join(', '));
 
 function buildCatalog(OUT, vers) {
   const HDR = '/* Derived from the Red Hat OpenShift Container Platform documentation (Apache-2.0); extracted and reformatted, with generated constraint summaries. See NOTICE. */\n';
@@ -262,6 +259,9 @@ function buildCatalog(OUT, vers) {
 // 게시 중 오류가 나면 기존 data를 복구한다.
 const live = path.join(__dirname, 'data');
 require('./tools/publish').withPublication(__dirname, work => {
+  const all = (fs.existsSync(SRC) ? fs.readdirSync(SRC) : []).map(f => (f.match(/^v(\d+\.\d+)\.json$/) || [])[1]).filter(Boolean);
+  const missingVersions = mandatory.filter(v => !all.includes(v));
+  if (missingVersions.length) throw new Error('수집 원본 누락: ' + missingVersions.join(', '));
   const stage = path.join(work, 'new');
   fs.mkdirSync(stage);
   buildCatalog(stage, all.sort(vcmp));

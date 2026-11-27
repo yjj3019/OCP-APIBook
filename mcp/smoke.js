@@ -40,11 +40,39 @@ let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ')
   t('해당 버전의 제약으로 필터', !r.out.apis.some(a => a.kind === 'AlertmanagerConfig'));
   r = await call('generate_manifest', { api: 'Deployment', name: '123', namespace: 'true' });
   const parsed = require('../sim').yamlParse(r.out.yaml)[0];
+  const labels = [];
+  for (const ending of ['blue', 'green']) {
+    const name = 'deployment.'.repeat(7) + ending;
+    const result = await call('generate_manifest', { api: 'Deployment', name });
+    const obj = require('../sim').yamlParse(result.out.yaml)[0];
+    const label = obj.spec.selector.matchLabels.app, container = obj.spec.template.spec.containers[0].name;
+    t('long workload name ' + ending, obj.metadata.name === name && label.length <= 63 && obj.spec.template.metadata.labels.app === label &&
+      /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/.test(container));
+    labels.push(label);
+  }
+  t('distinct long names retain distinct selectors', labels[0] !== labels[1]);
   t('YAML 문자열 보존', parsed.metadata.name === '123' && parsed.metadata.namespace === 'true' && parsed.spec.selector.matchLabels.app === '123' && parsed.spec.template.spec.containers[0].name === '123');
+  r = await call('search_apis', { query: 'machine spec.authoritativeAPI' });
+  const machine = r.out.results.find(x => x.kind === 'Machine');
+  t('compound query identifies the field release', machine?.version === '4.21' && machine.fieldVersions.join() === '4.21');
+  if (machine) {
+    r = await call('get_fields', { api: machine.id, version: machine.version, path: 'spec' });
+    t('search result opens matching field schema', r.out.fields.some(f => f.name === 'authoritativeAPI'));
+  }
   r = await call('search_apis', { query: 'authoritativeAPI' });
   t('구버전 필드 통합 검색', ['Machine', 'MachineSet', 'ControlPlaneMachineSet'].every(kind =>
     r.out.results.some(x => x.kind === kind && x.fieldVersions.includes('4.21') && !x.fieldVersions.includes('5.0'))));
   const oldId = 'datagather-insights-openshift-io-v1alpha2';
+  for (const query of ['Machine.spec.authoritativeAPI', 'Machine `spec.authoritativeAPI`', 'machine spec.authoritativeAPI,']) {
+    r = await call('search_apis', { query });
+    t(query, r.out.results.find(x => x.kind === 'Machine')?.version === '4.21');
+  }
+  r = await call('get_constraints', { api: 'k8s.ovn.org/ClusterUserDefinedNetwork', version: '4.20', type: 'cond' });
+  t('constraints use paths in requested release', r.out.version === '4.20' && r.out.shownCounts.cond === r.out.constraints.length &&
+    r.out.constraints.some(c => c.path === 'spec.network.layer2.joinSubnets') &&
+    r.out.constraints.every(c => c.versions.join() === '4.20' && (!c.pathsByVersion || c.pathsByVersion['4.20'].includes(c.path))));
+  r = await call('get_constraints', { api: oldId, version: '5.0' });
+  t('constraints reject incompatible schema ID', r.err === true);
   r = await call('get_api', { api: 'core/Binding', version: '5.0' });
   t('엔드포인트 공통 쿼리 인자', !r.err && r.out.endpoints.every(e =>
     ['dryRun', 'fieldValidation'].every(n => e.queryParametersByMethod.POST.includes(n))));

@@ -208,6 +208,16 @@ else {
   for (const mode of ['Strict', 'Warn', 'Ignore']) {
     const result = run({ ...manifest, extraField: 'example' }, mode);
     ok(result.req.path.endsWith('fieldValidation=' + mode) && result.status === (mode === 'Strict' ? 400 : 201), mode + ' 요청과 판정 일치');
+    ok(!Object.hasOwn(result.body, 'extraField') && result.req.body.extraField === 'example' &&
+      (result.warnings.length > 0) === (mode === 'Warn'), mode + ' 응답 본문과 경고');
+  }
+  const obj = { ...manifest, metadata: { ...manifest.metadata, labels: { 'keep.me': 'yes' } },
+    spec: { to: { ...manifest.spec.to, 'unknown.key': true } } };
+  for (const op of ['create', 'replace', 'patch']) {
+    const opt = { op, fv: 'Warn', scn: 'ok', ptype: 'application/merge-patch+json', pbody: JSON.stringify(obj) };
+    const res = Sim.simulate(opt, obj, a, d, schema, Sim.validate(obj, a, d, schema));
+    ok(res.status < 300 && !Object.hasOwn(res.body.spec.to, 'unknown.key') &&
+      res.body.metadata.labels['keep.me'] === 'yes' && obj.spec.to['unknown.key'] === true, op + ' 중첩 필드 제거 및 맵 키 보존');
   }
 }
 {
@@ -218,6 +228,12 @@ else {
     ok(binding.d.eps.every(e => e.ms.some(m => m.m === 'POST' &&
       m.q.includes('dryRun') && m.q.includes('fieldValidation') && m.q.length === new Set(m.q).size)), v + ' Binding 공통 쿼리 파라미터');
     const route = db.apis.find(a => a.kind === 'Route'), ops = endpoints.operations(route);
+    const scale = db.apis.find(a => a.kind === 'Scale' && a.group === 'autoscaling');
+    const scaleDoc = { a: scale, low: 'scale', ns: true, gv: scale.group + '/' + scale.version };
+    const get = { op: 'get', scn: 'ok', name: 'demo', ns: 'default' };
+    const req = sim.simulate(get, { metadata: {} }, scale, scaleDoc, {}, []).req;
+    ok(req.path.endsWith('/deployments/demo/scale') &&
+      sim._t.ocCmd(get, scaleDoc, 'default', 'demo', null, req.path) === 'oc get --raw ' + sim._t.sq(req.path), v + ' Scale REST/oc 경로 일치');
     ok(ops.list?.p.endsWith('/v1/routes') && ops.create?.p.endsWith('/namespaces/{namespace}/routes'), v + ' Route 목록과 생성 경로');
     const review = db.apis.find(a => a.kind === 'TokenReview' && a.group === 'authentication.k8s.io');
     const d = { a: review, ns: false, gv: review.group + '/' + review.version };

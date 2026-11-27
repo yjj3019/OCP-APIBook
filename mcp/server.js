@@ -127,6 +127,7 @@ const TOOLS = [
         const record = x.d.a, m = MERGED.apis[record.kind + '|' + record.group];
         const release = v || x.fieldVersions?.[0] || record.rv || LATEST;
         const o = brief(m, release);
+        o.version = release;
         if (x.fieldVersions) o.fieldVersions = x.fieldVersions;
         o.summary = cut(rec(m, release).d?.desc, 220); return o;
       });
@@ -175,12 +176,26 @@ const TOOLS = [
       }) };
     } },
   { name: 'get_constraints', description: 'API 의 제약·제한 사항(변경 불가, 폐지 예정, 미리보기, 싱글턴, 상호 배타, 조건부, 값 제한)과 각 제약이 적용되는 버전, 호환성 레벨. 원문 설명 문장에서 추출한 것이므로 정확한 내용은 원문을 확인한다.',
-    inputSchema: { type: 'object', properties: { api: { type: 'string' }, type: { type: 'string', enum: Object.keys(TYPE) } }, required: ['api'] },
+    inputSchema: { type: 'object', properties: { api: { type: 'string' }, version: VER, type: { type: 'string', enum: Object.keys(TYPE) } }, required: ['api'] },
     run(a) {
       const m = resolve(a.api);
-      if (a.type !== undefined && !TYPE[a.type]) throw new Error('type 은 ' + Object.keys(TYPE).join(', ') + ' 중 하나');
-      const list = (m.cons || []).filter(c => !a.type || c.t === a.type).map(c => ({ type: c.t, typeName: TYPE[c.t], path: c.p || '(API 전체)', alsoAt: c.n ? `${c.n}곳 (예: ${(c.ps || []).slice(0, 3).join(', ')})` : undefined, statement: c.x, versions: c.v, primaryPathVersions: c.pathsByVersion ? c.v.filter(v => c.pathsByVersion[v].includes(c.p)) : c.v, pathsByVersion: c.pathsByVersion }));
-      return { api: `${m.group || 'core'}/${m.kind}`, versions: m.vers, tier: m.tier, counts: m.constraintTotals || m.flags, shownCounts: m.flags, constraints: list, note: '설명 문장에서 정규식으로 추출한 요약입니다.' };
+      const requested = verArg(a), version = requested && pickVersion(m, requested, a.api);
+      if (a.type !== undefined && !Object.hasOwn(TYPE, a.type)) throw new Error('type 은 ' + Object.keys(TYPE).join(', ') + ' 중 하나');
+      const list = [], shownCounts = {};
+      for (const c of m.cons || []) {
+        if (version && !c.v.includes(version) || a.type && c.t !== a.type) continue;
+        const scopedPaths = version && c.pathsByVersion?.[version];
+        const primary = scopedPaths ? scopedPaths[0] : c.p;
+        const count = scopedPaths ? scopedPaths.length : c.n;
+        const versions = version ? [version] : c.v;
+        list.push({ type: c.t, typeName: TYPE[c.t], path: primary || '(API 전체)', statement: c.x, versions,
+          alsoAt: count > 1 ? `${count}곳 (예: ${(scopedPaths || c.ps).slice(0, 3).join(', ')})` : undefined,
+          primaryPathVersions: versions.filter(v => !c.pathsByVersion || c.pathsByVersion[v].includes(primary)),
+          pathsByVersion: scopedPaths ? { [version]: scopedPaths } : c.pathsByVersion });
+        shownCounts[c.t] = (shownCounts[c.t] || 0) + 1;
+      }
+      return { api: `${m.group || 'core'}/${m.kind}`, version, versions: m.vers, tier: m.tier, counts: version ? m.countsByVersion[version] : m.constraintTotals || m.flags,
+        shownCounts: version ? shownCounts : m.flags, constraints: list, note: '설명 문장에서 정규식으로 추출한 요약입니다.' };
     } },
   { name: 'compare_versions', description: 'API 의 버전 간 차이(필드 추가/삭제, 타입 변경, 필수 여부 변경, 엔드포인트 변경).',
     inputSchema: { type: 'object', properties: { api: { type: 'string' } }, required: ['api'] },
@@ -198,9 +213,12 @@ const TOOLS = [
       if (name.length > 253 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/.test(name)) throw new Error('name 은 소문자 RFC 1123 서브도메인이어야 합니다(소문자·숫자·"-"·".", 253자 이하)');
       if (ns.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(ns)) throw new Error('namespace 는 소문자 RFC 1123 라벨이어야 합니다(소문자·숫자·"-", 63자 이하)');
       const yamlString = require('../sim.js').yamlDump;
+      // Workloads can have 253-character names, but selector values and container names allow 63.
+      const label = name.length <= 63 ? name : name.slice(0, 50) + '-' + require('node:crypto').createHash('sha256').update(name).digest('hex').slice(0, 12);
+      const container = label.split('.')[0].replace(/-+$/, '');
       const REF = {   // 문서에 하위 필드가 없는 참조 타입 중 필수로 자주 나오는 것
-        LabelSelector: pad => [`${pad}matchLabels:`, `${pad}  app: ${yamlString(name)}`],
-        PodTemplateSpec: pad => [`${pad}metadata:`, `${pad}  labels:`, `${pad}    app: ${yamlString(name)}`, `${pad}spec:`, `${pad}  containers:`, `${pad}  - name: ${yamlString(name.split('.')[0])}`, `${pad}    image: "<image>"`],
+        LabelSelector: pad => [`${pad}matchLabels:`, `${pad}  app: ${yamlString(label)}`],
+        PodTemplateSpec: pad => [`${pad}metadata:`, `${pad}  labels:`, `${pad}    app: ${yamlString(label)}`, `${pad}spec:`, `${pad}  containers:`, `${pad}  - name: ${yamlString(container)}`, `${pad}    image: "<image>"`],
       };
       const lines = [], isArr = t => /^array/i.test(t);
       const ph = t => /^int|^number/i.test(t) ? '0' : /^bool/i.test(t) ? 'false' : /^string/i.test(t) ? '"<string>"' : isArr(t) ? '[]' : '{}' + (/^object$/i.test(t) ? '' : ' # ' + t);
@@ -252,7 +270,7 @@ function handle(msg) {
       currentCatalog(() => {});
       const want = params && params.protocolVersion;
       return ok(id, { protocolVersion: PROTOCOLS.includes(want) ? want : PROTOCOLS[0], capabilities: { tools: { listChanged: false } }, serverInfo: SERVER,
-        instructions: VERS.join('/') + ' 컨테이너 플랫폼 API 레퍼런스(읽기 전용, 비공식). 먼저 search_apis 로 API 를 찾고 get_api, get_fields, get_constraints, compare_versions 로 자세히 확인하세요.' });
+        instructions: VERS.join('/') + ' 컨테이너 플랫폼 API 레퍼런스(읽기 전용, 비공식). search_apis 결과의 id와 version을 get_api, get_fields, get_constraints에 함께 전달하세요.' });
     }
     case 'ping': return ok(id, {});
     case 'tools/list': currentCatalog(() => {}); return ok(id, { tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });

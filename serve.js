@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 정적 서버: node serve.js [port] [--host 0.0.0.0] [--no-precompress] [--dev]
 // 기본은 127.0.0.1(로컬 전용). 외부 허용은 --host 0.0.0.0 또는 HOST 환경변수.
-const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib');
+const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('node:crypto');
 const ROOT = fs.realpathSync.native(__dirname), args = process.argv.slice(2);
 const hi = args.indexOf('--host');
 const port = +(args.find(a => /^\d+$/.test(a)) || process.env.PORT || 8080);
@@ -15,12 +15,12 @@ const MIME = { '.html': T + 'html' + U, '.js': T + 'javascript' + U, '.css': T +
 const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']);
 // Pages와 동일한 공개 파일 및 데이터 카탈로그만 서비스한다.
 const ROOT_NOEXT = new Set(['LICENSE', 'NOTICE']);                                          // 확장자 없는 공개 문서
-const { publicFiles, isDataFile } = require('./tools/site-files.js');
+const { publicFiles, isDataFile, canonicalBytes, loaderHash } = require('./tools/site-files.js');
 // 보안 헤더. CSP 는 인라인 스크립트/이벤트 핸들러를 막아 XSS 피해를 줄인다(script-src 에 'unsafe-inline' 금지).
 // style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 글꼴은 사용자 시스템 글꼴만 쓴다(웹 글꼴 없음). base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'none'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Content-Security-Policy': `default-src 'self'; script-src 'self' '${loaderHash}'; style-src 'self' 'unsafe-inline'; font-src 'none'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin' };
 
 const realpath = p => new Promise(ok => fs.realpath.native(p, (e, r) => ok(e ? null : r)));
@@ -56,12 +56,12 @@ function evict(keep) {
     if (k !== keep) { cache.delete(k); total -= e.size; }
   }
 }
-function compressed(file, st, enc) {
-  const key = file + '|' + enc, stamp = st.mtimeMs + '|' + st.size, old = cache.get(key);
+function compressed(file, st, enc, snapshot, digest) {
+  const key = file + '|' + enc, stamp = digest || st.mtimeMs + '|' + st.size, old = cache.get(key);
   if (old && old.stamp === stamp) { cache.delete(key); cache.set(key, old); return old.p; } // 최근 사용으로 갱신
   if (old) { cache.delete(key); total -= old.size; }                                        // 파일이 바뀜: 이전 버전 제거
   const e = { stamp, size: 0 };
-  e.p = fs.promises.readFile(file).then(buf => new Promise((ok, no) => {
+  e.p = (snapshot ? Promise.resolve(snapshot) : fs.promises.readFile(file)).then(buf => new Promise((ok, no) => {
     const cb = (err, out) => err ? no(err) : ok(out);
     if (enc === 'br') zlib.brotliCompress(buf, { params: {
       [zlib.constants.BROTLI_PARAM_QUALITY]: buf.length > (1 << 20) ? 5 : 9, // 큰 파일은 낮은 품질로 빠르게
@@ -107,11 +107,17 @@ async function handle(req, res) {
   const coding = encodingFor(accept, TEXTUAL.has(ext), st.size < 1024);
   if (!coding) return send(res, 406, 'Not Acceptable', { Vary: 'Accept-Encoding' });
   const enc = coding === 'identity' ? '' : coding;
-  const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}${enc ? '-' + enc : ''}"`;
-  // data/ 파일이 ?v=<해시 12자 이상 16진수> 로 요청되면 내용이 바뀌면 URL 도 바뀌므로 장기 캐시. 그 외는 ETag 재검증.
-  const hashed = !DEV && path.relative(ROOT, file).split(path.sep)[0] === 'data' && /(^|&)v=[0-9a-f]{12,}(&|$)/i.test(query);
+  const version = new URLSearchParams(query).get('v');
+  const pinned = version !== null && (ext === '.js' || ext === '.css');
+  let snapshot, digest;
+  if (pinned || ext === '.html') {
+    snapshot = canonicalBytes(await fs.promises.readFile(file));
+    digest = crypto.createHash('sha256').update(snapshot).digest('base64url');
+    if (pinned && digest !== version) return send(res, 410, 'Catalog changed. Reload the page.', { 'Cache-Control': 'no-store' });
+  }
+  const etag = `W/"${digest || st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16)}${enc ? '-' + enc : ''}"`;
   const headers = { 'Content-Type': MIME[ext] || (ROOT_NOEXT.has(path.basename(file)) ? 'text/plain; charset=utf-8' : 'application/octet-stream'), ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
-    'Cache-Control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache', ...SEC };
+    'Cache-Control': pinned && !DEV ? 'public, max-age=31536000, immutable' : 'no-cache', ...SEC };
   if (TEXTUAL.has(ext)) headers.Vary = 'Accept-Encoding';
 
   // 조건부 요청: If-None-Match 가 있으면 그것만, 없으면 If-Modified-Since
@@ -121,13 +127,14 @@ async function handle(req, res) {
   }
   if (enc) {
     headers['Content-Encoding'] = enc;
-    const body = await compressed(file, st, enc);
+    const body = await compressed(file, st, enc, snapshot, digest);
     headers['Content-Length'] = body.length;
     res.writeHead(200, headers); return res.end(req.method === 'HEAD' ? undefined : body);
   }
-  headers['Content-Length'] = st.size;
+  headers['Content-Length'] = snapshot ? snapshot.length : st.size;
   res.writeHead(200, headers);
   if (req.method === 'HEAD') return res.end();
+  if (snapshot) return res.end(snapshot);
   const rs = fs.createReadStream(file);
   rs.on('error', () => res.destroy());       // 읽기 오류 -> 연결만 정리
   res.on('close', () => rs.destroy());       // 클라이언트 중단 시 스트림 정리

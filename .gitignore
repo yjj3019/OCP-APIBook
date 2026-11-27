@@ -1,5 +1,7 @@
 # 수집 중간 산출물과 브라우저 자동화 임시 파일
 _scrape/
+.catalog-build-transaction/
+.catalog-owner-*
 __pycache__/
 .playwright-mcp/
 node_modules/

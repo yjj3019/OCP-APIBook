@@ -11,10 +11,10 @@ description: OpenShift(OCP) 코드, Operator·컨트롤러, API 클라이언트 
 
 | 알고 싶은 내용 | 조회 방법 |
 |---|---|
-| 이름을 모르는 리소스, 필드명, 한글 키워드 | `search_apis`의 `query`. 버전을 생략하면 구버전 전용 API와 필드도 찾는다. 정확한 필드명·경로를 검색했을 때 `fieldVersions`가 있으면 그 릴리스에서 상세를 조회한다. 분류나 범위별 목록·개수는 `list_apis`를 사용한다. |
+| 이름을 모르는 리소스, 필드명, 한글 키워드 | `search_apis`의 `query`. 버전을 생략하면 구버전 전용 API와 필드도 찾는다. 결과의 `id`와 `version`을 상세 조회에 함께 전달한다. `fieldVersions`에는 검색한 필드를 함께 제공하는 릴리스가 표시된다. 분류나 범위별 목록·개수는 `list_apis`를 사용한다. |
 | 특정 리소스의 설명, REST 경로, 공식 문서 | `get_api`에 `api`와 문서 `version`을 전달한다. 같은 Kind가 여러 그룹에 있으면 `group/Kind`를 사용한다. 코어 그룹은 `core/Kind`다. |
 | 하위 필드의 타입과 필수 여부 | `get_fields`에 **부모 경로**를 전달한다. 예를 들어 `spec.tls.termination`은 `path=spec.tls` 결과에서 읽는다. 배열 원소의 하위 경로는 `spec.rules[]` 형식이다. |
-| 적용 제약이나 업그레이드 시 변경점 | `get_constraints`와 `compare_versions`에는 `api`를 전달한다. 반환된 버전 목록에서 질문에 해당하는 릴리스를 선택한다. |
+| 적용 제약이나 업그레이드 시 변경점 | 특정 릴리스의 제약은 `get_constraints`에 `api`와 `version`을 전달한다. 전체 릴리스의 제약은 `version`을 생략한다. 릴리스 간 변경은 `compare_versions`에 `api`를 전달한다. |
 | 리소스 YAML 예시 | `generate_manifest`에 리소스와 문서 버전을 전달한다. 결과에서 사용자가 채울 자리표시자를 짚어 준다. |
 
 답변에는 문서 릴리스(예: 4.22)와 리소스의 `apiVersion`(예: `route.openshift.io/v1`)을 구별해 적는다. 출처가 필요하면 같은 버전의 `get_api.docUrl`을 사용한다. 요청한 릴리스에 리소스가 없으면 제공 버전을 알려 준다.

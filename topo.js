@@ -149,18 +149,23 @@
         <label class="chk"><input type="checkbox" id="tiso"> 연결 없는 API 숨기기</label><button class="btn ghost" id="trelay">배치 다시</button></div>
       <div class="tchips" id="ttypes">${typeChips(state, false)}</div>
       <div class="tchips cats" id="tcats">${cats.map(b => `<button class="chip" data-tcat="${b}" aria-pressed="false"><i class="dot" style="background:${GraphColor(catIdx[b], dark())}"></i>${esc(C.CAT[b] || String(b).replace(/_apis$/, '').replace(/_/g, ' '))}</button>`).join('')}</div>
-      <div class="tbody"><div class="gcv big"><canvas role="img" aria-label="전체 API 토폴로지 그래프. 키보드로는 아래 노드 목록을 사용하세요"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
+      <p class="note" id="orbit-help">드래그하거나 그래프에서 방향키를 눌러 회전하세요. 휠이나 두 손가락으로 확대·축소할 수 있습니다.</p>
+      <div class="tbody"><div class="gcv big"><canvas tabindex="0" role="img" aria-label="3D API 토폴로지" aria-describedby="orbit-help"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
       <div class="tinfo" id="tinfo" aria-live="polite"></div></div>
       <details class="epd" id="nl"><summary>노드 목록 (키보드·스크린리더용)</summary><div class="in" id="nlist"></div></details>`;
     cats.forEach(b => { if (!(b in catIdx)) catIdx[b] = Object.keys(catIdx).length; });
     const cv = host.querySelector('canvas'), info = host.querySelector('#tinfo'), box = host.querySelector('.gcv'), stat = host.querySelector('#tstat');
     const hover = tipFor(box);
-    const view = new GraphView(cv, { labels: 'auto', rep: 380, edgeLen: 46, gravity: 0.0025, onSelect: n => selectNode(n ? n.id : null), onHover: hover });
-    let ringR = 0;
+    const view = new GraphView(cv, { spatial: true, labels: 'auto', rep: 380, edgeLen: 46, gravity: 0.0025, onSelect: n => selectNode(n ? n.id : null), onHover: hover });
     function centers() {
       const cnt = {}; G.nodes.forEach(n => cnt[n.book] = (cnt[n.book] || 0) + 1);
-      const total = cats.reduce((s, b) => s + Math.sqrt(cnt[b]), 0), out = {}; let ang = 0; ringR = 140 + total * 4.5;
-      cats.forEach(b => { const share = Math.sqrt(cnt[b]) / total * Math.PI * 2; ang += share / 2; out[b] = [Math.cos(ang) * ringR, Math.sin(ang) * ringR]; ang += share / 2; });
+      const total = cats.reduce((s, b) => s + Math.sqrt(cnt[b]), 0), out = {};
+      const radius = 140 + total * 4.5;
+      cats.forEach((b, i) => {
+        const y = 1 - 2 * (i + 0.5) / cats.length;
+        const ring = Math.sqrt(1 - y * y), angle = i * Math.PI * (3 - Math.sqrt(5));
+        out[b] = [radius * ring * Math.cos(angle), radius * y, radius * ring * Math.sin(angle)];
+      });
       return out;
     }
     const cen = centers();
@@ -169,15 +174,17 @@
       edges.forEach(e => { deg[e.s] = (deg[e.s] || 0) + 1; deg[e.t] = (deg[e.t] || 0) + 1; });
       let list = G.nodes.filter(n => !state.hideIso || deg[n.id]);
       const nodes = list.map((n, i) => {
-        const node = mkNode(n, deg[n.id] || 0, { tx: cen[n.book][0], ty: cen[n.book][1] });
-        const p = keepPos && pos.get(n.id); if (p) { node.x = p[0]; node.y = p[1]; } else { const a = i * 2.4; node.x = cen[n.book][0] + Math.cos(a) * 30; node.y = cen[n.book][1] + Math.sin(a) * 30; }
+        const [tx, ty, tz] = cen[n.book];
+        const node = mkNode(n, deg[n.id] || 0, { tx, ty, tz });
+        const p = keepPos && pos.get(n.id);
+        [node.x, node.y, node.z] = p || [tx + Math.cos(i * 2.4) * 30, ty + Math.sin(i * 2.4) * 30, tz + Math.sin(i * 1.7) * 30];
         return node;
       });
       labelFix(nodes);
       view.setData(nodes, edges, { sel: state.sel, warm: keepPos ? 50 : 200 });
       view.select(state.sel); applyKeep(); renderInfo(); stat.textContent = `API ${nodes.length}개 · 관계 ${view.edges.length}개`;
     }
-    function savePos() { view.nodes.forEach(n => pos.set(n.id, [n.x, n.y])); }
+    function savePos() { view.nodes.forEach(n => pos.set(n.id, [n.x, n.y, n.z])); }
     function applyKeep() {
       let keep = null;
       if (state.q) { const r = E.search(state.q).apis.slice(0, 40); keep = new Set(r.map(x => x.d.a.url.split('#')[1])); }

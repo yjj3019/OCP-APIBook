@@ -2,7 +2,6 @@
 /* 앱 코어: 상태·저장소·지연 로딩·통합 검색 엔진·라우터·셸(사이드바/테마/토스트) */
 (function () {
   'use strict';
-  const SELF = document.currentScript;
   const App = window.App = { V: (window.MERGED && window.MERGED.build) || '0', views: {}, U: {}, ENG: {}, t0: performance.now() };
   const $ = App.$ = (s, r) => (r || document).querySelector(s);
   App.$$ = (s, r) => [...(r || document).querySelectorAll(s)];
@@ -61,17 +60,24 @@
   };
 
   /* ---------- 지연 로딩 ---------- */
-  App.CODE_V = ((SELF && SELF.src.match(/[?&]v=([^&]+)/)) || [])[1] || '0';   // 코드는 index.html 의 ?v= 토큰, 데이터는 MERGED.build 를 쓴다
+  const hashes = JSON.parse(document.getElementById('catalog-hashes')?.textContent || '{}');
   const loaded = {};
   App.unlazy = (...srcs) => srcs.forEach(s => { delete loaded[s]; });
   App.lazy = (...srcs) => Promise.all(srcs.map(s => loaded[s] || (loaded[s] = new Promise((ok, no) => {
-    const e = document.createElement('script'); e.src = s + (s.includes('?') ? '' : '?v=' + (s.startsWith('data/') ? App.V : App.CODE_V)); e.onload = ok; e.onerror = () => { delete loaded[s]; no(new Error(s + ' 로드 실패')); }; document.head.appendChild(e);
+    const e = document.createElement('script');
+    const hash = hashes[s];
+    if (!hash) return no(new Error('현재 페이지의 파일 목록에 없습니다. 페이지를 새로고침해 주세요.'));
+    if (location.protocol !== 'file:') e.integrity = 'sha256-' + hash;
+    e.src = s + '?v=' + hash.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    e.onload = ok;
+    e.onerror = () => { delete loaded[s]; no(new Error(s + ' 로드 실패. 페이지를 새로고침해 주세요.')); };
+    document.head.appendChild(e);
   }))));
   App.lazyGraph = () => App.lazy('graph.js', 'viz.js', 'topo.js');
   App.lazySim = () => App.lazy('graph.js', 'sim.js');
 
   /* ---------- 데이터 ---------- */
-  const MG = App.MG = window.MERGED, VL = App.VL = MG.list, LATEST = App.LATEST = MG.default;
+  const MG = App.MG = window.MERGED || { list: [] }, VL = App.VL = MG.list, LATEST = App.LATEST = MG.default;
   const DB = window.DB = window.DB || {};
   App.loadCore = async v => {
     if (DB[v] && window.FIDX && FIDX[v]) return;
@@ -208,7 +214,7 @@
     finally { bar.done(); }
   }
   App.go = go;
-  const fatal = e => { console.error(e); showError('데이터를 불러오지 못했습니다', '네트워크 상태를 확인한 뒤 다시 시도해 주세요.'); };
+  const fatal = e => { console.error(e); showError('데이터를 불러오지 못했습니다', '연결 상태를 확인하고 다시 시도해 주세요. 카탈로그가 갱신됐다면 페이지를 새로고침해 주세요.'); };
   App.render = (html, wide) => { const m = $('#main'); m.innerHTML = `<div class="page${wide ? ' wide' : ''}">${html}</div>`; window.scrollTo(0, 0); return m.firstElementChild; };
   App.NAME = 'API Book';   // 제품 이름(상표가 들어가지 않는 중립적인 이름)
   App.title = t => { document.title = (t ? t + ' · ' : '') + App.NAME; };
