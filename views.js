@@ -94,7 +94,7 @@
       let list = r.apis.filter(x => {
         const a = x.d.a, m = a.m, f = m.constraintTotals || m.flags || {};
         if (st.sc === 'ns' && m.ns !== true) return false; if (st.sc === 'cl' && m.ns !== false) return false;
-        if (st.st && App.stab(m.gv[App.pickVer(m, App.ver)]) !== st.st) return false;
+        if (st.st && App.stab(m.gv[App.fieldRelease(x.fieldVersions) || App.pickVer(m, App.ver)]) !== st.st) return false;
         if (st.cn === 'dep' && !f.dep) return false; if (st.cn === 'prev' && !f.prev) return false; if (st.cn === 'imm' && !f.imm) return false;
         if (st.cn === 'ver' && !App.availText(m)) return false;
         return true;
@@ -305,7 +305,12 @@
     const loadF = () => App.ensureFields(dv, a.id).then(() => {
       if (dead) return; const F = App.fields(dv)[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
       tabsC[0][1] = yamlFull(d, F); if (ct === 0 && $('#codeb')) setCode(0);
-    }).catch(() => { if (dead) return; const fh = $('#fieldhost'); if (!fh) return; fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드 데이터를 불러오지 못했습니다.</p><button class="btn ghost sm" id="fretry">다시 시도</button></div>'; $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); }); });
+    }).catch(() => {
+      const fh = $('#fieldhost'); if (dead || !fh) return;
+      fh.innerHTML = '<div class="empty" style="padding:20px"><p class="hint">중첩 필드를 불러오지 못했습니다. 카탈로그가 갱신됐다면 페이지를 새로고침해 주세요.</p><button class="btn ghost sm" id="fretry">다시 시도</button> <button class="btn ghost sm" id="freload">페이지 새로고침</button></div>';
+      $('#fretry').addEventListener('click', () => { fh.innerHTML = '<div class="skel" style="height:120px"></div>'; loadF(); });
+      $('#freload').addEventListener('click', () => location.reload());
+    });
     loadF();
     const relIO = new IntersectionObserver(async es => {
       if (!es.some(e => e.isIntersecting)) return; relIO.disconnect();

@@ -461,7 +461,7 @@
   const empty = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
   function validate(M, a, d, sch) {
     const issues = [];
-    const add = (level, p, msg, code, x) => issues.push(Object.assign({ level, path: pstr(p), msg, code }, x || {}));
+    const add = (level, p, msg, code, x) => issues.push(Object.assign({ level, path: pstr(p), msg, code }, code === 'unknown' ? { segments: p } : {}, x));
     if (M.apiVersion !== d.gv) add('error', ['apiVersion'], `apiVersion은 "${d.gv}" 이어야 합니다 (현재: ${JSON.stringify(M.apiVersion)})`, 'mismatch');
     if (M.kind !== a.kind) add('error', ['kind'], `kind는 "${a.kind}" 이어야 합니다 (현재: ${JSON.stringify(M.kind)})`, 'mismatch');
     const md = M.metadata;
@@ -713,8 +713,12 @@
         return true;
       };
       const ok = (obj, iss) => {
-        status = opt.op === 'create' ? 201 : 200; body2 = serverObject(obj, d, sch, ns, opt.op); defaults = applyDefaults(body2, sch);
-        const unk = iss.filter(i => i.code === 'unknown'); if (unk.length && opt.fv === 'Warn') warnings = unk.map(u => `unknown field "${u.path}"`);
+        status = opt.op === 'create' ? 201 : 200;
+        body2 = serverObject(obj, d, sch, ns, opt.op);
+        const unknown = iss.filter(i => i.code === 'unknown');
+        for (const issue of unknown) delAt(body2, issue.segments);
+        if (opt.fv === 'Warn') warnings = unknown.map(u => `unknown field "${u.path}"`);
+        defaults = applyDefaults(body2, sch);
         if (opt.dry === 'All') note = 'dryRun=All 이므로 서버가 검증만 하고 저장하지 않습니다(응답은 저장했다면 받을 내용과 같습니다).';
       };
       if (opt.op === 'get' || opt.op === 'delete') {
@@ -755,11 +759,18 @@
   };
   const PATCH_T = { 'application/merge-patch+json': 'merge', 'application/json-patch+json': 'json', 'application/strategic-merge-patch+json': 'strategic' };
   /* 같은 요청을 oc 로: body 를 주면 create/replace 는 표준 입력(-f -)으로 넘김. fieldValidation → --validate(create/replace 만) */
-  function ocCmd(o, d, ns, name, body) {
+  function ocCmd(o, d, ns, name, body, requestPath) {
     const res = shw(d.low + (d.a.group ? '.' + d.a.group : '')), nsf = d.ns && ns ? ' -n ' + shw(ns) : '';
     const dash = String(name)[0] === '-', nm = dash ? '' : ' ' + shw(name), tail = dash ? ' -- ' + shw(name) : '';   // 이름이 '-' 로 시작하면 옵션으로 읽히지 않게 -- 뒤에 둠
     const dry = o.dry === 'All' && o.op !== 'get' ? ' --dry-run=server' : '', val = FVS.includes(o.fv) ? ' --validate=' + o.fv.toLowerCase() : '';
     const src = body != null ? `printf '%s\\n' ${sq(JSON.stringify(body))} | ` : '', file = body != null ? '-' : shw(d.low + '.yaml');
+    if (requestPath && endpoints.operations(d.a)[o.op]?.p.includes('/{name}/')) {
+      const raw = '--raw ' + sq(requestPath);
+      if (o.op === 'get' || o.op === 'delete') return `oc ${o.op} ${raw}`;
+      if (o.op === 'create' || o.op === 'replace') return `${src}oc ${o.op} ${raw} -f ${file}`;
+      // oc patch has no --raw flag. The curl command above uses the exact PATCH endpoint.
+      return '# 이 하위 리소스의 PATCH 요청은 위 curl 명령을 사용하세요.';
+    }
     switch (o.op) {
       case 'create': return `${src}oc create -f ${file}${nsf}${dry}${val}`;
       case 'get': return `oc get ${res}${nm}${nsf} -o yaml${tail}`;
@@ -1135,7 +1146,7 @@
           <h4 class="rh">예상 응답</h4><div class="statusline ${cls}"><b>${r.status}</b> ${esc(({ 200: 'OK', 201: 'Created', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 409: 'Conflict', 422: 'Unprocessable Entity' })[r.status] || '')}</div>
           ${r.warnings.length ? `<div class="warnhdr">Warning: ${r.warnings.map(esc).join('; ')}</div>` : ''}${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}
           <pre class="simreq"><code>${esc(JSON.stringify(r.body, null, 2))}</code></pre>${r.defaults && r.defaults.length ? `<div class="sdefs"><h4 class="rh">서버가 채운 기본값(문서 기준 추정)</h4><ul>${r.defaults.map(x => `<li><code>${esc(x.path)}</code> = <code>${esc(JSON.stringify(x.v))}</code></li>`).join('')}</ul><p class="note">필드 설명 문장("Defaults to …")에서 추정한 값입니다. 실제 apiserver 기본값 처리·어드미션·웹훅·컨트롤러 동작과 다를 수 있습니다.</p></div>` : ''}${doc}
-          <details class="epd"><summary>curl / oc 로 보내기</summary><div class="in"><pre class="simreq"><code>${esc('TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n\n' + curl(r.req) + '\n\n# oc 로는\n' + ocCmd(o, d, r.ns, r.name, r.req.body))}</code></pre></div></details>
+          <details class="epd"><summary>curl / oc 로 보내기</summary><div class="in"><pre class="simreq"><code>${esc('TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n\n' + curl(r.req) + '\n\n# oc 로는\n' + ocCmd(o, d, r.ns, r.name, r.req.body, r.req.path))}</code></pre></div></details>
           <p class="note">이 응답은 문서의 스키마 규칙으로 계산한 <b>가상 응답</b>입니다. 기본값은 설명 문장에서 추정한 것만 채우며, 실제 클러스터의 어드미션·웹훅·RBAC·충돌 검사는 반영하지 않습니다.</p>`;
       }
       drawResult();

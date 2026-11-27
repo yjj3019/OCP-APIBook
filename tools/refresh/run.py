@@ -183,17 +183,22 @@ def collect(version, source, work):
 def main():
     CACHE.mkdir(exist_ok=True)
     lock = CACHE / "refresh.lock"
-    with lock.open("x"):
-        pass
-    try:
+    # OS locks are released on process exit, including a forcibly stopped refresh.
+    # Keep the inode in place so concurrent runs always lock the same file.
+    with lock.open("a+b") as owner:
+        owner.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(owner.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with tempfile.TemporaryDirectory(dir=CACHE) as temporary:
             work = Path(temporary)
             for version, source in SOURCES.items():
                 collect(version, source, work)
             env = dict(os.environ, OCP_API_SNAPSHOT=str(work), OCP_API_PUBLISH_SNAPSHOT="1")
             subprocess.run(["node", "build.js"], cwd=ROOT, env=env, check=True)
-    finally:
-        lock.unlink()
 
 
 if __name__ == "__main__":

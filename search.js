@@ -192,6 +192,7 @@
     const stats = { tokens: toks.length, docs: docs.length, buildMs: 0 };
     stats.buildMs = (typeof performance !== 'undefined' ? performance : Date).now() - tIdx0;
 
+    const kindNames = new Set(docs.map(doc => doc.a.kind.toLowerCase()));
     function parse(q) {
       const raw = String(q).trim().slice(0, 300);   // 병적으로 긴 입력 방어
       const joined = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -302,21 +303,31 @@
         }
         gres.sort((a, b) => b.score - a.score);
       }
-      // An exact field name or suffix may belong to a different release than the representative record.
-      const fieldQuery = rl.replace(/^\./, '');
+      // Resolve field terms per resource. Different suffixes of a path can match the
+      // same field, and every requested field must exist in the selected release.
+      const queryParts = new Set();
+      for (const term of rl.match(/[a-z0-9_]+(?:\[\]|\{\})?(?:[./][a-z0-9_-]+(?:\[\]|\{\})?)*/g) || []) {
+        const qualified = term.match(/^(?:[\w.-]+\/)?([\w]+)\.((?:spec|status|metadata)(?:\.|$).*)$/);
+        queryParts.add(qualified && kindNames.has(qualified[1]) ? qualified[2] : term);
+      }
       for (const hit of apis) {
         const record = hit.d.a;
         if (!record.fieldVersions) continue;
-        const versions = new Set();
-        for (const p of record.fp) {
-          const field = p.toLowerCase();
-          if (field === fieldQuery || field.endsWith('.' + fieldQuery)) {
-            for (const v of record.fieldVersions[p] || record.m.vers) versions.add(v);
+        let releases = record.m.vers;
+        for (const term of queryParts) {
+          if (queryParts.size > 1 && (term === record.kind.toLowerCase() || term === record.group?.toLowerCase())) continue;
+          const matches = new Set();
+          for (const path of record.fp) {
+            const field = path.toLowerCase();
+            if (field === term || field.endsWith('.' + term)) {
+              for (const v of record.fieldVersions[path] || record.m.vers) matches.add(v);
+            }
           }
+          if (matches.size) releases = releases.filter(v => matches.has(v));
         }
-        if (versions.size) hit.fieldVersions = record.m.vers.filter(v => versions.has(v));
+        if (releases !== record.m.vers) hit.fieldVersions = releases;
       }
-      const out = { apis, guide: gres.slice(0, 6), P, relaxed };
+      const out = { apis: apis.filter(hit => hit.fieldVersions?.length !== 0), guide: gres.slice(0, 6), P, relaxed };
       if (rcache.size > 300) rcache.delete(rcache.keys().next().value);
       rcache.set(key, out);
       return out;

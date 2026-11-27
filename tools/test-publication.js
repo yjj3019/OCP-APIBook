@@ -4,10 +4,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { spawn, spawnSync } = require('node:child_process');
+const { once } = require('node:events');
+const { createHash } = require('node:crypto');
 const vm = require('node:vm');
 const { withPublication } = require('./publish');
 const { stageStamps } = require('./stamp');
-const { publicFiles } = require('./site-files');
+const { publicFiles, assembleSite } = require('./site-files');
 const repo = path.join(__dirname, '..');
 
 function workspace(t) {
@@ -42,7 +45,10 @@ test('rollback restores raw files, web stamps and data on each failed replacemen
 test('Windows and Git checkouts produce identical deployable bytes', t => {
   const root = workspace(t), out = path.join(root, 'out'), data = path.join(root, 'data');
   fs.mkdirSync(out); fs.mkdirSync(data);
-  const files = [...publicFiles, 'data/merged.js', 'data/legacy.js'];
+  const win = {};
+  vm.runInNewContext(fs.readFileSync(path.join(repo, 'data/merged.js'), 'utf8'), { window: win });
+  const latest = 'data/' + win.MERGED.default;
+  const files = [...publicFiles, 'data/merged.js', 'data/legacy.js', latest + '.js', latest + '.fidx.js', latest + '.fields.network_apis.js'];
   function stamp(eol) {
     for (const name of files) {
       const src = fs.readFileSync(path.join(repo, name), 'utf8').replace(/\r?\n/g, eol);
@@ -51,7 +57,117 @@ test('Windows and Git checkouts produce identical deployable bytes', t => {
     stageStamps(root, data, out);
     return ['index.html', 'sw.js'].map(n => fs.readFileSync(path.join(out, n), 'utf8'));
   }
-  assert.deepEqual(stamp('\r\n'), stamp('\n'));
+  const crlf = stamp('\r\n');
+  for (const name of ['index.html', 'sw.js']) fs.copyFileSync(path.join(out, name), path.join(root, name));
+  const site = path.join(root, '_site');
+  assembleSite(root, site);
+  const lf = stamp('\n');
+  assert.deepEqual(crlf, lf);
+  const hashes = JSON.parse(lf[0].match(/id="catalog-hashes" type="application\/json">([^<]+)/)[1]);
+  for (const file of Object.keys(hashes)) {
+    const digest = createHash('sha256').update(fs.readFileSync(path.join(site, file))).digest();
+    assert.equal(hashes[file], digest.toString('base64'));
+    if (file === 'data/merged.js' || file === 'data/legacy.js') {
+      assert.ok(lf[0].includes(`src="${file}?v=${digest.toString('base64url')}" integrity="sha256-${hashes[file]}"`));
+    }
+  }
+});
+
+test('direct files and hosted pages load the same assets in order under their CSP', () => {
+  const html = fs.readFileSync(path.join(repo, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
+  const styles = html.match(/<template id="page-styles">([\s\S]*?)<\/template>/)[1];
+  const scripts = html.match(/<template id="page-assets">([\s\S]*?)<\/template>/)[1];
+  assert.ok(html.indexOf('<script id="page-loader">') < html.indexOf('</head>'));
+  const loader = html.match(/<script id="page-loader">([\s\S]*?)<\/script>/)[1];
+  const hash = createHash('sha256').update(loader).digest('base64');
+  assert.ok(html.includes(`script-src 'self' 'sha256-${hash}';`));
+  const sources = Array.from((styles + scripts).matchAll(/<(link|script)\b[^>]*(?:src|href)="([^"]+)" integrity="([^"]+)"/g),
+    ([, localName, url, integrity]) => ({ localName, integrity, url, getAttribute: () => url }));
+  assert.equal(sources.filter(s => s.localName === 'link').length, 2);
+  assert.ok(sources[2].url.startsWith('ui-kit.js?'));
+  assert.ok(sources.at(-1).url.startsWith('boot.js?'));
+  for (const protocol of ['file:', 'http:', 'https:']) {
+    const added = [];
+    let domReady;
+    vm.runInNewContext(loader, { location: { protocol }, document: {
+      getElementById: id => ({ content: { children: sources.filter(el => el.localName === (id === 'page-styles' ? 'link' : 'script')) } }),
+      addEventListener: (name, fn) => { assert.equal(name, 'DOMContentLoaded'); domReady = fn; },
+      createElement: localName => ({ localName, setAttribute(k, v) { this[k] = v; } }),
+      head: { appendChild: el => added.push(el) }
+    } });
+    assert.equal(added.length, 2);
+    assert.ok(added.every(el => el.blocking === 'render'));
+    domReady();
+    assert.deepEqual(added.map(el => el.src || el.href), sources.map(el => el.url));
+    assert.ok(added.every((el, i) => el.integrity === (protocol === 'file:' ? undefined : sources[i].integrity)));
+    assert.ok(added.every(el => el.localName === 'script' ? el.async === false : el.rel === 'stylesheet'));
+  }
+});
+
+test('a new publisher recovers an interrupted replacement before preparing its own files', t => {
+  const root = workspace(t), data = path.join(root, 'data');
+  fs.mkdirSync(data);
+  fs.writeFileSync(path.join(data, 'merged.js'), 'previous');
+  const child = spawnSync(process.execPath, ['-e', `
+    const fs = require('node:fs'), path = require('node:path');
+    const { withPublication } = require(process.argv[1]), root = process.argv[2];
+    const rename = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      rename(from, to);
+      if (from === path.join(root, 'data')) process.exit(27);
+    };
+    withPublication(root, work => {
+      const extra = path.join(work, 'extra'), next = path.join(work, 'next');
+      fs.writeFileSync(extra, 'new');
+      fs.mkdirSync(next);
+      return [[extra, path.join(root, 'new-release')], [next, path.join(root, 'data')]];
+    });
+  `, require.resolve('./publish'), root]);
+  assert.equal(child.status, 27);
+  assert.equal(fs.existsSync(data), false);
+  const recovery = spawnSync(process.execPath, ['-e', `
+    const fs = require('node:fs'), path = require('node:path'), root = process.argv[2];
+    const rename = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      rename(from, to);
+      if (from === path.join(root, 'new-release')) process.exit(28);
+    };
+    require(process.argv[1]).withPublication(root, () => []);
+  `, require.resolve('./publish'), root]);
+  assert.equal(recovery.status, 28);
+  withPublication(root, () => {
+    assert.equal(fs.readFileSync(path.join(data, 'merged.js'), 'utf8'), 'previous');
+    assert.equal(fs.existsSync(path.join(root, 'new-release')), false);
+    assert.throws(() => withPublication(root, () => []), { code: 'EEXIST' });
+    return [];
+  });
+  assert.deepEqual(fs.readdirSync(root), ['data']);
+});
+
+test('old data URLs cannot acquire replacement bytes or an immutable cache entry', async t => {
+  const root = workspace(t);
+  fs.mkdirSync(path.join(root, 'tools'));
+  fs.mkdirSync(path.join(root, 'data'));
+  for (const name of ['serve.js', 'tools/site-files.js']) fs.copyFileSync(path.join(repo, name), path.join(root, name));
+  const file = path.join(root, 'data', '5.0.fields.network_apis.js');
+  const url = content => '/data/5.0.fields.network_apis.js?v=' + createHash('sha256').update(content).digest('base64url');
+  fs.writeFileSync(file, 'previous');
+  const server = spawn(process.execPath, ['serve.js', '0', '--no-precompress'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const [line] = await once(server.stdout, 'data');
+    const base = line.toString().match(/http:\/\/[^ ]+/)[0];
+    const old = await fetch(base + url('previous'));
+    assert.match(old.headers.get('cache-control'), /immutable/);
+    assert.equal(await old.text(), 'previous');
+    fs.writeFileSync(file, 'replaced');
+    const stale = await fetch(base + url('previous'), { headers: { 'If-None-Match': old.headers.get('etag') } });
+    assert.equal(stale.status, 410);
+    assert.equal(stale.headers.get('cache-control'), 'no-store');
+    assert.equal(await (await fetch(base + url('replaced'))).text(), 'replaced');
+  } finally {
+    const stopped = once(server, 'exit');
+    server.kill(); await stopped;
+  }
 });
 
 test('a missing required asset rejects the new service worker installation', async () => {
@@ -76,6 +192,37 @@ test('a missing required asset rejects the new service worker installation', asy
   fail = false;
   await event('install'); await event('activate');
   assert.deepEqual(deleted, [old]);
+});
+
+test('the worker only caches verified assets from its own build and finishes a pending write', async () => {
+  const scope = 'https://example.test/book/', handlers = {}, pending = [];
+  const script = fs.readFileSync(path.join(repo, 'sw.js'), 'utf8');
+  const html = fs.readFileSync(path.join(repo, 'index.html'), 'utf8');
+  const hash = JSON.parse(html.match(/id="catalog-hashes" type="application\/json">([^<]+)/)[1])['sim.js'];
+  const url = scope + 'sim.js?v=' + Buffer.from(hash, 'base64').toString('base64url');
+  let finish, writes = 0;
+  vm.runInNewContext(script, {
+    self: { registration: { scope }, addEventListener: (name, fn) => { handlers[name] = fn; } },
+    Request, fetch: async req => {
+      assert.equal(req.url, url); assert.equal(req.integrity, 'sha256-' + hash);
+      return new Response('verified response');
+    },
+    caches: { match: async () => undefined, open: async () => ({ put: async () => {
+      writes++;
+      await new Promise(resolve => { finish = resolve; });
+    } }) }
+  });
+  function dispatch(target) {
+    let response;
+    handlers.fetch({ request: new Request(target), respondWith: p => { response = p; }, waitUntil: p => pending.push(p) });
+    return response;
+  }
+  assert.equal(dispatch(scope + 'sim.js?v=previous'), undefined);
+  assert.equal(dispatch(url.replace('/book/', '/other/')), undefined);
+  const response = await dispatch(url);
+  assert.equal(await response.text(), 'verified response');
+  assert.equal(writes, 1); assert.equal(pending.length, 1);
+  finish(); await Promise.all(pending);
 });
 
 test('an existing MCP tool retries a lazy read across catalog generations', t => {
