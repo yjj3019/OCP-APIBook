@@ -29,7 +29,7 @@
   V.home = async () => {
     App.title(''); App.curKey = null;
     const keys = Object.keys(MG.apis).length, E = U.E;
-    const tools = [['topology', '토폴로지', 'API 사이의 연결을 그래프로 보고, 노드를 눌러 설명과 관계를 확인합니다.', 'topology'], ['sim', 'API 설계 시뮬레이터', '스펙 기반 폼으로 리소스를 설계하고 검증하며 요청·응답을 미리 확인합니다.', 'flask'], ['compare', '버전 비교', '4.22 · 4.21 · 4.20 사이에 추가·삭제·변경된 API와 필드를 봅니다.', 'compare'], ['guide', '가이드', 'API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정.', 'file-text']];
+    const tools = [['topology', '토폴로지', 'API 사이의 연결을 그래프로 보고, 노드를 눌러 설명과 관계를 확인합니다.', 'topology'], ['sim', 'API 설계 시뮬레이터', '스펙 기반 폼으로 리소스를 설계하고 검증하며 요청·응답을 미리 확인합니다.', 'flask'], ['compare', '버전 비교', '버전 사이에 추가·삭제·변경된 API와 필드를 봅니다.', 'compare'], ['guide', '가이드', 'API 지원 단계, 호환성 정책, 폐지 정책, kubelet 로그 설정.', 'file-text']];
     const favs = App.fav.list().filter(k => U.byKey.has(k)), recs = App.recent.list().filter(k => U.byKey.has(k) && !favs.includes(k)).slice(0, 6);
     const lrow = k => { const a = U.byKey.get(k); return `<a class="lrow" href="${App.hrefFor(a)}"><span class="k">${esc(a.kind)}</span>${stabBadge(a)}<span class="g">${esc(a.group || 'core')}</span></a>`; };
     const sel = App.ver, older = VL[VL.indexOf(sel) + 1], prev = older || sel, cur2 = older ? sel : (VL[VL.indexOf(sel) - 1] || sel), ds = diffSets(prev, cur2);
@@ -39,7 +39,7 @@
       <section class="hero">
         <div class="eyebrow">API 레퍼런스 · ${VL.join(' · ')}</div>
         <h1>API를 찾고, 비교하고,<br> 직접 설계해 보세요</h1>
-        <p>세 버전의 API 레퍼런스를 한곳에 모았습니다. 필드 이름만 알아도 찾을 수 있고, 버전별 제약과 변경 사항이 함께 표시됩니다.</p>
+        <p>${VL.length}개 버전의 API 레퍼런스를 한곳에 모았습니다. 필드 이름만 알아도 찾을 수 있고, 버전별 제약과 변경 사항이 함께 표시됩니다.</p>
         <button class="herosearch" id="hs">${ic('search', 20)}<span>API·필드·가이드 검색 (예: route)</span><kbd>Ctrl K</kbd></button>
         <div class="examples">${['route', '네트워크 정책', 'mcp', 'pvc', 'termination', 'deprecated'].map(x => `<a class="chip" href="${App.href('browse:q=' + encodeURIComponent(x))}">${esc(x)}</a>`).join('')}</div>
       </section>
@@ -68,8 +68,9 @@
   const parseQS = s => { const o = {}; (s || '').split('&').forEach(p => { if (!p) return; const i = p.indexOf('='); o[App.dec(i < 0 ? p : p.slice(0, i))] = i < 0 ? '' : App.dec(p.slice(i + 1)); }); return o; };
   const rowHTML = (r, i, P, H, q) => {
     const a = r.d.a, m = a.m, s = q ? U.E.snippet(r.d, P) : { text: App.firstSent(a.d && a.d.desc.replace(/Compatibility level.*$/s, '')), src: '설명' };
-    return `<li><a class="row" data-i="${i}" href="${App.hrefFor(a)}"><div class="l1"><span class="kind">${App.hlz(a.kind, H)}</span><span class="gv">${App.hlz(gvOf(a), H)}</span>${stabBadge(a)}${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span></div>
-      <p class="snip">${s.src !== '설명' ? '<em>필드</em>' : ''}${App.hlz(s.text, H)}</p><div class="l2">${App.pills(m)}${App.consChips(m, 4)}</div></a></li>`;
+    const v = App.fieldRelease(r.fieldVersions);
+    return `<li><a class="row" data-i="${i}" href="${App.hrefFor(a, v)}"><div class="l1"><span class="kind">${App.hlz(a.kind, H)}</span><span class="gv">${App.hlz(gvOf(a, v), H)}</span>${stabBadge(a, v)}${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span></div>
+      <p class="snip">${v ? `<em>필드 · ${r.fieldVersions.join(" · ")}</em>` : s.src !== '설명' ? '<em>필드</em>' : ''}${App.hlz(s.text, H)}</p><div class="l2">${App.pills(m)}${App.consChips(m, 4)}</div></a></li>`;
   };
   V.browse = async (arg, my) => {
     App.title('API 탐색'); App.curKey = null;
@@ -88,10 +89,10 @@
       <div class="count" id="bc" aria-live="polite"></div><ul class="list" id="bl"></ul><div id="bm" style="margin-top:12px;text-align:center"></div><div id="bg"></div>`);
     let cur = -1, shown = [], limit = 60, rows = [], P = null, H = null;
     const apply = () => {
-      const t0 = performance.now(), q = st.q.trim(), r = E.search(q, { cat: st.cat });
+      const q = st.q.trim(), r = E.search(q, { cat: st.cat });
       P = r.P; H = E.highlighter(P);
       let list = r.apis.filter(x => {
-        const a = x.d.a, m = a.m, f = m.flags || {};
+        const a = x.d.a, m = a.m, f = m.constraintTotals || m.flags || {};
         if (st.sc === 'ns' && m.ns !== true) return false; if (st.sc === 'cl' && m.ns !== false) return false;
         if (st.st && App.stab(m.gv[App.pickVer(m, App.ver)]) !== st.st) return false;
         if (st.cn === 'dep' && !f.dep) return false; if (st.cn === 'prev' && !f.prev) return false; if (st.cn === 'imm' && !f.imm) return false;
@@ -105,14 +106,14 @@
       const anyF = st.cat || st.sc || st.st || st.cn;
       $('#fclr').hidden = !anyF; ['cat', 'sc', 'st', 'cn'].forEach(k => $('#f-' + k).classList.toggle('on', !!st[k]));
       $('#bx').hidden = !st.q;
-      $('#bc').innerHTML = `<span><b>${rows.length}</b>개 API</span> <span class="badge info">${VL.join(' · ')} 통합</span>${r.relaxed ? ' <span class="badge beta">일부 단어만 일치한 결과 포함</span>' : ''}<span style="margin-left:auto;font:12px var(--mono)">${(performance.now() - t0).toFixed(1)}ms</span>`;
+      $('#bc').innerHTML = `<span><b>${rows.length}</b>개 API</span> <span class="badge info">${VL.join(' · ')} 통합</span>${r.relaxed ? ' <span class="badge beta">일부 단어만 일치한 결과 포함</span>' : ''}`;
       if (!rows.length) {
         const sg = q ? E.suggest(q) : [];
         $('#bl').innerHTML = `<li class="empty"><b>${q ? `‘${esc(q)}’` : '조건'}</b>에 맞는 API가 없습니다.${sg.length ? `<p class="hint">혹시 이것인가요? ${sg.map(d => `<a href="${App.href('browse:q=' + encodeURIComponent(d.a.kind))}">${esc(d.a.kind)}</a>`).join(' · ')}</p>` : '<p class="hint">검색어를 줄이거나 필터를 해제해 보세요.</p>'}</li>`;
       } else $('#bl').innerHTML = shown.map((x, i) => rowHTML(x, i, P, H, q)).join('');
       $('#bm').innerHTML = rows.length > shown.length ? `<button class="btn ghost" id="more">${ic('chevron-down', 14)} ${rows.length - shown.length}개 더 보기</button>` : '';
       const g = $('#bg'); g.innerHTML = q && r.guide.length ? `<div class="sec-title">가이드 문서</div><ul class="list guidelist">${r.guide.map(x => `<li><a class="row" href="${App.href('guide:' + x.g.id)}"><div class="l1"><span style="font-weight:500">${App.hlz(x.g.title, H)}</span></div></a></li>`).join('')}</ul>` : '';
-      mark();
+      mark(true);
     };
     const mark = (noScroll) => { App.$$('#bl .row').forEach((e, i) => e.classList.toggle('cur', i === cur)); const c = $('#bl .row.cur'); if (c && !noScroll) c.scrollIntoView({ block: 'nearest' }); };
     const sync = () => { const qs = Object.entries(st).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&'); history.replaceState(null, '', App.href('browse' + (qs ? ':' + qs : ''))); };
@@ -120,7 +121,7 @@
     $('#bq').addEventListener('input', e => { st.q = e.target.value; later(); });
     $('#bq').addEventListener('keydown', e => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (!shown.length) return; e.preventDefault(); cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length; mark(); }
-      else if (e.key === 'Enter' && cur >= 0 && shown[cur]) location.hash = App.hrefFor(shown[cur].d.a);
+      else if (e.key === 'Enter' && cur >= 0 && shown[cur]) location.hash = App.hrefFor(shown[cur].d.a, App.fieldRelease(shown[cur].fieldVersions));
       else if (e.key === 'Escape' && st.q) { st.q = ''; e.target.value = ''; later(); }
     });
     $('#bx').addEventListener('click', () => { st.q = ''; $('#bq').value = ''; $('#bq').focus(); later(); });
@@ -169,15 +170,15 @@
     return `# 목록 보기\noc get ${r}${d.ns ? ' -A' : ''}\n\n# 하나 자세히 보기\noc get ${r} <이름>${n} -o yaml\n\n# 필드 설명 보기\noc explain ${r}\noc explain ${r}.spec\n\n# 서버에 적용하기 전 검증만 (저장 안 함)\noc apply --dry-run=server -f ${d.low}.yaml\n\n# 만들기·수정 (위 YAML을 ${d.low}.yaml 로 저장)\noc apply -f ${d.low}.yaml\n\n# 편집 · 삭제\noc edit ${r} <이름>${n}\noc delete ${r} <이름>${n}`;
   };
   const restFor = d => {
-    const eps = (d.a.d && d.a.d.eps) || [], fill = p => p.replace('{namespace}', '<네임스페이스>').replace('{name}', '<이름>'), has = (e, m) => e.ms.some(x => x.m === m);
-    const col = eps.find(e => !/\{name\}|watch/.test(e.p) && has(e, 'GET')), one = eps.find(e => /\{name\}$/.test(e.p) && has(e, 'GET'));
-    if (!col && !one) return '# 이 API는 REST 예시를 만들 수 없습니다. 아래 엔드포인트를 참고하세요.';
+    const ops = ApiEndpoints.operations(d.a);
+    const fill = p => p.replace('{namespace}', '<네임스페이스>').replace('{name}', '<이름>');
+    if (!Object.values(ops).some(Boolean)) return '# 이 API의 문서에서 요청 예시를 찾지 못했습니다.';
     const H = '-H "Authorization: Bearer $TOKEN"'; let s = 'TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n';
-    if (col) s += `\n# 목록 조회\ncurl -sk ${H} "$APISERVER${fill(col.p)}"`;
-    if (one) s += `\n\n# 하나 조회\ncurl -sk ${H} "$APISERVER${fill(one.p)}"`;
-    if (col && has(col, 'POST')) s += `\n\n# 생성 (본문은 위 YAML 파일)\ncurl -sk -X POST ${H} -H "Content-Type: application/yaml" --data-binary @${d.low}.yaml \\\n  "$APISERVER${fill(col.p)}?fieldValidation=Strict"`;
-    if (one && has(one, 'PATCH')) s += `\n\n# 일부만 수정 (merge patch)\ncurl -sk -X PATCH ${H} -H "Content-Type: application/merge-patch+json" \\\n  -d '{"metadata":{"labels":{"app":"demo"}}}' "$APISERVER${fill(one.p)}"`;
-    if (one && has(one, 'DELETE')) s += `\n\n# 삭제\ncurl -sk -X DELETE ${H} "$APISERVER${fill(one.p)}"`;
+    if (ops.list) s += `\n# 목록 조회\ncurl -sS ${H} "$APISERVER${fill(ops.list.p)}"`;
+    if (ops.get) s += `\n\n# 하나 조회\ncurl -sS ${H} "$APISERVER${fill(ops.get.p)}"`;
+    if (ops.create) s += `\n\n# 생성 (본문은 위 YAML 파일)\ncurl -sS -X POST ${H} -H "Content-Type: application/yaml" --data-binary @${d.low}.yaml \\\n  "$APISERVER${fill(ops.create.p)}?fieldValidation=Strict"`;
+    if (ops.patch) s += `\n\n# 일부만 수정 (merge patch)\ncurl -sS -X PATCH ${H} -H "Content-Type: application/merge-patch+json" \\\n  -d '{"metadata":{"labels":{"app":"demo"}}}' "$APISERVER${fill(ops.patch.p)}"`;
+    if (ops.delete) s += `\n\n# 삭제\ncurl -sS -X DELETE ${H} "$APISERVER${fill(ops.delete.p)}"`;
     return s;
   };
   const CONS_GROUPS = [
@@ -189,13 +190,17 @@
     ['cond', '조건부', 'info', 'mute', '특정 조건에서만 유효하거나 필수가 되는 필드입니다.'],
     ['limit', '값 범위 · 형식', 'filter', 'mute', '길이·개수·범위·형식 제한이나 허용 값 목록입니다.'],
   ];
+  const pathsAt = (c, v) => c.pathsByVersion ? c.pathsByVersion[v] || [] : c.ps || [c.p];
   function consCard(a, m, dv) {
     const L = VL.slice().reverse(), at = App.availText(m), stab = App.stab(m.gv[dv]);
     const gvs = L.filter(v => m.vers.includes(v)).map(v => `${v} ${m.gv[v]}`), gvChanged = new Set(m.vers.map(v => m.gv[v])).size > 1;
     const tiers = [...new Set(m.vers.map(v => m.tier && m.tier[v]).filter(Boolean))];
     const tierBy = L.filter(v => m.tier && m.tier[v]).map(v => `${v}: 레벨 ${m.tier[v]}`);
-    const items = (type) => m.cons.filter(c => c.t === type);
-    const itemHTML = c => `<div class="citem"><code${c.ps && c.ps.length > 1 ? ` title="${esc(c.ps.join(', '))}"` : ''}>${esc(c.p || 'API 전체')}</code>${c.n > 1 ? `<span class="morep">외 ${c.n - 1}곳</span>` : ''}${esc(c.x)}${c.v.length < m.vers.length ? `<span class="vs">${c.v.map(v => `<span class="vp">${v}</span>`).join('')}</span>` : ''}</div>`;
+    const items = (type) => m.cons.filter(c => c.t === type && c.v.includes(dv));
+    const itemHTML = c => {
+      const paths = pathsAt(c, dv), count = c.pathsByVersion ? paths.length : c.n || 1;
+      return `<div class="citem"><code title="${esc(paths.join(', '))}">${esc(paths[0] || 'API 전체')}</code>${count > 1 ? `<span class="morep">외 ${count - 1}곳</span>` : ''}${esc(c.x)}</div>`;
+    };
     const grp = (cls, icon, title, right, body, open) => `<details class="cgroup ${cls}"${open ? ' open' : ''}><summary><span class="ci ${cls}">${ic(icon, 15)}</span><span>${title}</span><span class="ct">${right || ''}${ic('chevron-right', 14, 'chev')}</span></summary>${body}</details>`;
     let h = grp(at ? 'warn' : 'ok', 'layers', '제공 버전', at ? `<span class="badge beta">${esc(at)}</span>` : `<span class="badge ga">전 버전 제공</span>`,
       `<p class="csum">${at ? `제공 범위: <b>${esc(at)}</b>. 선택한 버전에 없으면 가장 최신 제공 버전의 내용을 보여 줍니다.` : `조사한 ${VL.length}개 버전(${VL.join(', ')}) 모두에서 제공됩니다.`}</p><div class="citems"><div class="vrow" style="margin:0">${L.map(v => `<span class="vchip${m.vers.includes(v) ? '' : ' off'}">${v} ${m.vers.includes(v) ? esc(m.gv[v]) : '없음'}</span>`).join('')}</div>${gvChanged ? `<div class="citem">API 버전이 릴리스마다 바뀌었습니다: ${esc(gvs.join(' → '))}. 이전 버전용 매니페스트는 <code>apiVersion</code>을 확인하세요.</div>` : ''}</div>`, true);
@@ -203,8 +208,9 @@
       `<p class="csum"><b>${esc(m.gv[dv])}</b> — ${esc(App.STAB[stab][1])}.</p>${tiers.length ? `<div class="citems">${tiers.map(t => `<div class="citem"><code>호환성 레벨 ${t}</code>${esc(App.TIER[t])}</div>`).join('')}${tiers.length > 1 ? `<div class="citem">버전별: ${esc(tierBy.join(' · '))}</div>` : ''}</div>` : '<p class="csum">원문에 호환성 레벨 표기가 없습니다.</p>'}`, stab !== 'ga' || tiers.some(t => t >= 3));
     h += grp('mute', 'box', '범위', `<span class="badge">${m.ns === true ? '네임스페이스' : m.ns === false ? '클러스터' : '정보 없음'}</span>`, `<p class="csum">${m.ns === true ? '네임스페이스 범위 리소스입니다. <code>metadata.namespace</code>가 필요하며 생략하면 현재 프로젝트에 만들어집니다.' : m.ns === false ? '클러스터 범위 리소스입니다. 네임스페이스 없이 전역으로 존재하며 <code>namespace</code>는 무시됩니다.' : '원문 엔드포인트 정보로는 범위를 판단할 수 없습니다.'}</p>`);
     for (const [t, title, icon, cls, desc] of CONS_GROUPS) {
-      const list = items(t); if (!list.length) continue;
-      h += grp(cls, icon, title, `<span>${list.length}개</span>`, `<p class="csum">${desc}</p><div class="citems">${list.slice(0, 40).map(itemHTML).join('')}${list.length > 40 ? `<div class="note">앞 40개만 표시합니다.</div>` : ''}</div>`, (t === 'dep' || t === 'prev' || t === 'single') && list.length <= 6);
+      const list = items(t), total = m.countsByVersion[dv][t] || 0;
+      if (!total) continue;
+      h += grp(cls, icon, title, `<span>${list.length === total ? total + '건' : list.length + ' / ' + total + '건'}</span>`, `<p class="csum">${desc}</p><div class="citems">${list.map(itemHTML).join('')}${list.length < total ? `<p class="note">전체 ${total}건 중 ${list.length}건을 표시합니다.</p>` : ''}</div>`, (t === 'dep' || t === 'prev' || t === 'single') && list.length <= 6);
     }
     const nf = m.fdiff.length, nt = m.tdiff.length, nr = m.rdiff.length, ne = m.ediff.length;
     if (m.vers.length > 1 && (nf || nt || nr || ne)) {
@@ -213,10 +219,10 @@
         `<div class="citems">${nf ? `<div class="citem"><b>일부 버전에만 있는 필드</b></div>${m.fdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${e.sub ? `<span class="morep">하위 ${e.sub}개 포함</span>` : ''}${vsp(e.v)}</div>`).join('')}` : ''}
         ${nt ? `<div class="citem"><b>버전마다 타입이 다른 필드</b></div>${m.tdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${Object.entries(e.t).map(([v, t]) => `<span class="vp">${v}</span> ${esc(t)}`).join(' · ')}</div>`).join('')}` : ''}
         ${nr ? `<div class="citem"><b>필수 여부가 다른 필드 (필수인 버전)</b></div>${m.rdiff.map(e => `<div class="citem"><code>${esc(e.p)}</code>${e.sub ? `<span class="morep">하위 ${e.sub}개 포함</span>` : ''}${vsp(e.v)}</div>`).join('')}` : ''}
-        ${ne ? `<div class="citem"><b>일부 버전에만 있는 엔드포인트</b></div>${m.ediff.map(e => `<div class="citem"><code>${esc(e.e)}</code>${vsp(e.v)}</div>`).join('')}` : ''}${m.trunc ? '<div class="note">항목이 많아 일부만 표시합니다.</div>' : ''}</div>`, false);
+        ${ne ? `<div class="citem"><b>일부 버전에만 있는 엔드포인트</b></div>${m.ediff.map(e => `<div class="citem"><code>${esc(e.e)}</code>${vsp(e.v)}</div>`).join('')}` : ''}${m.diffTrunc ? '<div class="note">항목이 많아 일부만 표시합니다.</div>' : ''}</div>`, false);
     }
-    const n = m.cons.length;
-    return `<section class="card consbox" id="c-cons"><div style="display:flex;align-items:center;gap:10px;padding:12px 18px 8px"><span class="ci info" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center">${ic('shield', 16)}</span><b style="font-size:15.5px">제약 · 제한 사항</b><span class="note" style="margin:0 0 0 auto" title="원문 설명 문장에서 패턴 매칭으로 자동 추출했습니다. 오탐이나 누락이 있을 수 있으니 중요한 판단은 원문을 확인하세요.">원문 설명에서 자동 추출 · ${n}건</span></div>${h}</section>`;
+    const n = Object.values(m.countsByVersion[dv]).reduce((sum, count) => sum + count, 0);
+    return `<section class="card consbox" id="c-cons"><div style="display:flex;align-items:center;gap:10px;padding:12px 18px 8px"><span class="ci info" style="width:28px;height:28px;border-radius:8px;display:grid;place-items:center">${ic('shield', 16)}</span><b style="font-size:15.5px">제약 · 제한 사항</b><span class="note" style="margin:0 0 0 auto" title="원문 설명 문장에서 패턴 매칭으로 자동 추출했습니다. 오탐이나 누락이 있을 수 있으니 중요한 판단은 원문을 확인하세요.">${dv} 문서 기준 · 전체 ${n}건</span></div>${h}</section>`;
   }
   function epsHTML(a, params) {
     const mblock = m => `<div class="mb"><div class="mh"><span class="m ${m.m}">${m.m}</span> ${esc(m.d)}</div>
@@ -265,7 +271,7 @@
     const root = App.render(`
       <nav class="crumb" aria-label="경로"><a href="${App.href('')}">홈</a>${ic('chevron-right', 12)}<a href="${App.href('browse:cat=' + a.book)}">${esc(catName(a.book))}</a>${ic('chevron-right', 12)}<span>${esc(a.kind)}</span></nav>
       <section class="card dhead"><div class="top"><div><h1 class="d-title">${esc(a.kind)}</h1><div class="dbadges"><span class="gv">${esc(d.gv)}</span><span class="badge ${stab}" title="${esc(App.STAB[stab][1])}">${App.STAB[stab][0]}</span>${scopeBadge(a)}<span class="badge">${esc(catName(a.book))}</span>${m.tier && m.tier[dv] ? `<span class="badge info" title="${esc(App.TIER[m.tier[dv]])}">호환성 레벨 ${m.tier[dv]}</span>` : ''}</div></div>
-        <div class="dact"><button class="btn ghost" id="favb" aria-pressed="${fav}">${ic(fav ? 'star-fill' : 'star', 15)} <span>${fav ? '즐겨찾기됨' : '즐겨찾기'}</span></button><button class="btn ghost" id="cpb">${ic('copy', 15)} 이름 복사</button><a class="btn primary" href="${App.href('sim:' + m.id[dv])}">${ic('flask', 15)} 시뮬레이터에서 설계</a></div></div>
+        <div class="dact"><button class="btn ghost" id="favb" aria-pressed="${fav}">${ic(fav ? 'star-fill' : 'star', 15)} <span>${fav ? '즐겨찾기됨' : '즐겨찾기'}</span></button><button class="btn ghost" id="cpb">${ic('copy', 15)} 이름 복사</button><a class="btn primary" href="#${dv}/sim:${m.id[dv]}">${ic('flask', 15)} 시뮬레이터에서 설계</a></div></div>
         ${missing ? `<div class="isum" style="margin-top:14px;background:var(--warn-soft);color:var(--warn)">${ic('info', 14)} 선택한 <b>${ver}</b>에는 없는 API입니다. 제공되는 가장 최신 버전(<b>${dv}</b>) 기준으로 보여 줍니다.</div>` : ''}
         <div class="vrow"><span class="note" style="margin:0">제공 버전</span>${VL.slice().reverse().map(v => m.vers.includes(v) ? `<a class="vchip${v === dv ? ' on' : ''}" href="${hrefV(v)}" title="${m.fp[v] !== m.fp[dv] ? '선택 버전과 필드·엔드포인트가 다릅니다' : '선택 버전과 같습니다'}">${v} ${esc(m.gv[v])}${m.fp[v] !== m.fp[dv] ? ' ●' : ''}</a>` : `<span class="vchip off">${v} 없음</span>`).join('')}<span class="note" style="margin:0">● 선택한 버전과 다름</span></div>
         <p class="lead">${esc(first)}</p>${rest ? `<button class="more" id="more">자세히 보기</button><div class="full" id="full" hidden>${esc(rest)}</div>` : ''}
@@ -295,7 +301,7 @@
     secs.forEach(s => s && io.observe(s));
     // 중첩 필드(큰 파일)는 뒤늦게, 관계도는 화면에 들어올 때
     let dead = false, live = null;
-    const consBy = new Map(); m.cons.forEach(c => { if (['dep', 'prev', 'imm'].includes(c.t)) (c.ps && c.ps.length ? c.ps : (c.p ? [c.p] : [])).forEach(p => { if (!consBy.has(p)) consBy.set(p, []); consBy.get(p).push(c); }); });
+    const consBy = new Map(); m.cons.forEach(c => { if (c.v.includes(dv) && ['dep', 'prev', 'imm'].includes(c.t)) pathsAt(c, dv).forEach(p => { if (!consBy.has(p)) consBy.set(p, []); consBy.get(p).push(c); }); });
     const loadF = () => App.ensureFields(dv, a.id).then(() => {
       if (dead) return; const F = App.fields(dv)[a.id] || []; const fh = $('#fieldhost'); if (fh) fieldTree(fh, a, F, consBy);
       tabsC[0][1] = yamlFull(d, F); if (ct === 0 && $('#codeb')) setCode(0);

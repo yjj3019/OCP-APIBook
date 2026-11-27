@@ -9,7 +9,7 @@ Third-party content: published API reference documentation
 
 The API descriptions, field specifications, endpoint listings and guide text
 in this project (the data in the data/ directory) are derived from the
-OpenShift Container Platform 4.22, 4.21 and 4.20 API documentation published
+OpenShift Container Platform 5.0, 4.22, 4.21 and 4.20 API documentation published
 at:
 
   https://docs.redhat.com/en/documentation/openshift_container_platform/
@@ -43,7 +43,7 @@ Apache License 2.0 (https://github.com/kubernetes/kubernetes).
 
 Changes made to the original content (Apache License 2.0, section 4(b)):
 
-  - Text was extracted from the HTML pages and reformatted into JSON/JS data.
+  - Text was extracted from the published HTML pages and their versioned AsciiDoc sources and reformatted into JSON/JS data.
   - Long descriptions and tables were split, normalized and, where noted in the
     build scripts, truncated; markup, navigation and scripts were removed.
   - Trademark names in human-readable prose (API descriptions, field
@@ -59,7 +59,7 @@ Changes made to the original content (Apache License 2.0, section 4(b)):
     documentation published under Apache-2.0 and points to this file.
   - The "constraints and limitations" shown for each API are sentences
     extracted automatically (by pattern matching) from the original descriptions,
-    plus differences computed between the 4.22, 4.21 and 4.20 editions. They are
+    plus differences computed between documentation editions. They are
     not authoritative; consult the original documentation.
   - The "general relationships" shown in the topology view are NOT part of the
     original documentation. They were compiled separately from general

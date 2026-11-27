@@ -69,5 +69,7 @@
  "It cannot be empty if the type is UUID.": "cond",
  "Maximum number of exemplars stored in memory for all series. exemplar-storage itself must be enabled using the spec.enableFeature option for exemplars to be scraped in the first place.": "cond",
  "When set to HostGroup, hostGroup must be configured with hostGroup, vmGroup and vmHostRule and this means the zone is defined by the grouping of those fields.": "cond",
- "maxSize defines the maximum number of exemplars stored in memory for all series. exemplar-storage itself must be enabled using the spec.enableFeature option for exemplars to be scraped in the first place.": "cond"
+ "maxSize defines the maximum number of exemplars stored in memory for all series. exemplar-storage itself must be enabled using the spec.enableFeature option for exemplars to be scraped in the first place.": "cond",
+ "For dynamic provisioning, this field must be set.": "cond",
+ "When specified, claim must not be set or be explicitly set to the empty string (\"\").": "excl"
 }

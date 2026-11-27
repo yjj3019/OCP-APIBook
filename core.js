@@ -118,20 +118,20 @@
     await Promise.all([App.loadCore(LATEST), window.LEGACY ? 0 : App.lazy('data/legacy.js')]);
     const db = App.prep(LATEST), lg = window.LEGACY;
     lg.apis.forEach(a => { a.fp = lg.fidx[a.id] || []; if (a.d) a.d.eps.forEach(e => { e.m = e.ms.map(x => x.m + ': ' + x.d); }); });
-    const apis = db.apis.concat(lg.apis);
-    apis.forEach(a => { a.key = a.kind + '|' + a.group; a.m = MG.apis[a.key]; a.rv = a.rv || LATEST; a.cons = a.m ? a.m.cons : []; });
+    const apis = ApiSearch.unifiedRecords(db.apis, lg, MG);
     U.apis = apis; U.guide = db.guide; U.E = ApiSearch.create({ guide: db.guide, apis });
     U.byKey = new Map(apis.map(a => [a.key, a]));
     U.docByKey = new Map(U.E.docs.map(d => [d.a.key, d]));
     U.idKey = new Map(); for (const [k, m] of Object.entries(MG.apis)) for (const v of Object.keys(m.id)) U.idKey.set(v + '|' + m.id[v], k);
     U.cats = {}; apis.forEach(a => { U.cats[a.book] = (U.cats[a.book] || 0) + 1; });
-    U.fieldCount = Object.values(window.FIDX[LATEST]).reduce((s, x) => s + x.length, 0);
-    U.consCount = Object.values(MG.apis).reduce((s, m) => s + m.cons.length, 0);
+    U.fieldCount = apis.reduce((sum, a) => sum + a.fp.length, 0);
+    U.consCount = Object.values(MG.apis).reduce((sum, m) => sum + Object.values(m.constraintTotals || m.flags).reduce((n, count) => n + count, 0), 0);
     App.bootMs = performance.now() - t;
   };
   /* 선택한 버전에서 API 가 있으면 그 버전, 없으면 있는 가장 최신 버전 */
   App.pickVer = (m, want) => (m.vers.includes(want) ? want : m.vers[0]);
-  App.hrefFor = (a, want) => { const v = App.pickVer(a.m, want || App.ver); return `#${App.ver}/api:${a.m.id[v]}`; };
+  App.hrefFor = (a, want) => { const v = App.pickVer(a.m, want || App.ver); return `#${want || App.ver}/api:${a.m.id[v]}`; };
+  App.fieldRelease = versions => versions?.includes(App.ver) ? App.ver : versions?.[0];
   App.stab = gv => /alpha/i.test(gv) ? 'alpha' : /beta/i.test(gv) ? 'beta' : 'ga';
   App.STAB = { ga: ['GA', '안정 버전'], beta: ['Beta', '필드·동작이 바뀔 수 있음'], alpha: ['Alpha', '예고 없이 변경·삭제될 수 있음'] };
   App.TIER = { 1: '메이저 릴리스 동안 최소 12개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정', 2: '메이저 릴리스 동안 최소 9개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정', 3: '마이너 릴리스 내 최소 6개월 또는 1개 마이너 릴리스(둘 중 긴 쪽) 안정', 4: '호환성 보장 없음. 언제든 변경될 수 있어 장기 지원이 필요한 곳에는 쓰지 않는 것이 좋음' };
@@ -148,9 +148,9 @@
     }
     return m.vers.slice().reverse().join('·') + '에서만 제공';
   };
-  App.pills = m => `<span class="vpills">${VL.slice().reverse().map(v => `<span class="vp${m.vers.includes(v) ? '' : ' off'}" title="${v}${m.vers.includes(v) ? ' 제공 · ' + m.gv[v] : ' 에는 없음'}">${v}</span>`).join('')}</span>`;
+  App.pills = m => `<span class="vpills"><span class="version-label">제공 버전</span>${VL.slice().reverse().map(v => `<span class="vp${m.vers.includes(v) ? '' : ' off'}" title="${v}${m.vers.includes(v) ? ' 제공 · ' + m.gv[v] : ' 에는 없음'}">${v}</span>`).join('')}</span>`;
   App.consChips = (m, max) => {
-    const f = m.flags || {}, out = [], at = App.availText(m);
+    const f = m.constraintTotals || m.flags || {}, out = [], at = App.availText(m);
     if (at) out.push(`<span class="cons ver">${App.ic('layers', 12)} ${esc(at)}</span>`);
     if (f.dep) out.push(`<span class="cons dep" title="설명에 폐지·제거 예정 표시가 있는 항목">${App.ic('alert', 12)} 폐지 예정 ${f.dep}</span>`);
     if (f.prev) out.push(`<span class="cons prev" title="Technology Preview·알파/베타 수준·기능 게이트가 언급된 항목">${App.ic('flask', 12)} 미리보기 ${f.prev}</span>`);

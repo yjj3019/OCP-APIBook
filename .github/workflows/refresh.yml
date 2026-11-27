@@ -1,0 +1,45 @@
+name: Refresh API catalog
+on:
+  schedule:
+    - cron: '20 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-api-catalog
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --prefix tools/refresh
+      - run: python tools/refresh/run.py
+      - run: node mcp/smoke.js
+      - name: Detect catalog changes
+        id: changes
+        run: |
+          if [[ -n "$(git status --porcelain -- data index.html sw.js)" ]]; then
+            echo 'found=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.changes.outputs.found == 'true'
+        with:
+          name: refreshed-api-catalog
+          path: |
+            data/
+            index.html
+            sw.js
+          retention-days: 14
+      - name: Check newly extracted constraints
+        run: node tools/cons-audit.js --strict

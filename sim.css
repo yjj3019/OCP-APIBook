@@ -47,11 +47,13 @@
 .simout pre{border-radius:10px}
 .bdg{display:inline-block;min-width:18px;text-align:center;font:700 11px var(--mono);border-radius:9px;padding:0 5px;color:#fff}
 .bdg.bad{background:var(--bad)}.bdg.warn{background:var(--warn)}.bdg.ok{background:var(--ok)}
-.vbad{font-size:13px;font-weight:500}.vbad.ok{color:var(--ok)}.vbad.bad{color:var(--bad)}.vbad.warn{color:var(--warn)}
+.vbad{font-size:14px;font-weight:650}.vbad.ok{color:var(--ok)}.vbad.bad{color:var(--bad)}.vbad.warn{color:var(--warn)}
 .issues{display:flex;flex-direction:column;gap:5px}
-.iss{display:block;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 10px;font-size:13px}
+.iss{display:block;text-align:left;border:1px solid var(--line-2);border-inline-start:3px solid var(--warn);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:10px 12px;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.iss.error{border-inline-start-color:var(--bad)}
+.iss code{overflow-wrap:anywhere}
 .iss:hover{border-color:var(--sub)}
-.iss .lv{display:inline-block;font:700 11px var(--sans);border-radius:5px;padding:0 6px;margin-right:6px;color:#fff}
+.iss .lv{display:inline-block;font:700 12px var(--sans);border-radius:5px;padding:0 6px;margin-right:6px;color:#fff}
 .iss.error .lv{background:var(--bad)}.iss.warn .lv{background:var(--warn)}
 .iss code{font:12.5px var(--mono)}
 .reqctl{display:flex;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}
@@ -95,5 +97,5 @@
 /* 새 셸에 맞춘 헤더 */
 .sim>.d-title{font:700 24px var(--sans)!important;letter-spacing:-.02em!important;margin:0 0 4px}
 .sim>.note{margin:0 0 14px;max-width:760px}
-.sf .fdef{font-size:.75em;color:var(--muted,#667);border:1px dashed currentColor;border-radius:4px;padding:0 4px;margin-left:4px;white-space:nowrap}
+.sf .fdef{font-size:.75em;color:var(--sub);border:1px dashed currentColor;border-radius:4px;padding:0 4px;margin-left:4px;white-space:nowrap}
 .sdefs ul{margin:.3em 0 .3em 1.2em;padding:0}.sdefs li{margin:.15em 0}
