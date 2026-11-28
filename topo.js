@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 토폴로지(전체 관계도)와 API 상세의 '연결 관계' 화면 */
 (function (root) {
   const ui = window.ApiBookLocale.text;

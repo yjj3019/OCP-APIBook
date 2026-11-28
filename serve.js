@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // 정적 서버: node serve.js [port] [--host 0.0.0.0] [--no-precompress] [--dev]
 // 기본은 127.0.0.1(로컬 전용). 외부 허용은 --host 0.0.0.0 또는 HOST 환경변수.
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('node:crypto');
@@ -14,8 +14,7 @@ const MIME = { '.html': T + 'html' + U, '.js': T + 'javascript' + U, '.css': T +
   '.svg': 'image/svg+xml' + U, '.txt': T + 'plain' + U, '.md': T + 'markdown' + U, '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 const TEXTUAL = new Set(['.html', '.js', '.css', '.json', '.svg', '.txt', '.md']);
 // Pages와 동일한 공개 파일 및 데이터 카탈로그만 서비스한다.
-const ROOT_NOEXT = new Set(['LICENSE', 'NOTICE']);                                          // 확장자 없는 공개 문서
-const { publicFiles, isDataFile, canonicalBytes, loaderHash } = require('./tools/site-files.js');
+const { legalFiles, publicFiles, isDataFile, canonicalBytes, loaderHash } = require('./tools/site-files.js');
 // 보안 헤더. CSP 는 인라인 스크립트/이벤트 핸들러를 막아 XSS 피해를 줄인다(script-src 에 'unsafe-inline' 금지).
 // style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 글꼴은 사용자 시스템 글꼴만 쓴다(웹 글꼴 없음). base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
@@ -110,13 +109,14 @@ async function handle(req, res) {
   const version = new URLSearchParams(query).get('v');
   const pinned = version !== null && (ext === '.js' || ext === '.css');
   let snapshot, digest;
-  if (pinned || ext === '.html') {
+  const legal = legalFiles.has(path.basename(file));
+  if (pinned || ext === '.html' || legal) {
     snapshot = canonicalBytes(await fs.promises.readFile(file));
     digest = crypto.createHash('sha256').update(snapshot).digest('base64url');
     if (pinned && digest !== version) return send(res, 410, 'Catalog changed. Reload the page.', { 'Cache-Control': 'no-store' });
   }
   const etag = `W/"${digest || st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16)}${enc ? '-' + enc : ''}"`;
-  const headers = { 'Content-Type': MIME[ext] || (ROOT_NOEXT.has(path.basename(file)) ? 'text/plain; charset=utf-8' : 'application/octet-stream'), ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
+  const headers = { 'Content-Type': MIME[ext] || (legal ? 'text/plain; charset=utf-8' : 'application/octet-stream'), ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
     'Cache-Control': pinned && !DEV ? 'public, max-age=31536000, immutable' : 'no-cache', ...SEC };
   if (TEXTUAL.has(ext)) headers.Vary = 'Accept-Encoding';
 

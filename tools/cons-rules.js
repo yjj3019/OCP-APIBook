@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 제약 문장 추출 규칙(build.js 와 tools/cons-audit.js 가 함께 쓴다).
  * 유형: imm(변경 불가) dep(폐기) prev(미리보기·기능 게이트) single(싱글턴) excl(상호 배타) cond(조건부) limit(값 제한)
  * 흐름: sentences(설명) -> classify(문장, 경로, 종류) = DROP_ALL/DENY 제외 -> PRIO 순서로 PAT 일치(BAD_BY·EXTRA 통과) -> RECLASS 재분류

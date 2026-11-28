@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* API Book MCP 서버 (stdio, 의존성 없음)
  *   node mcp/server.js
  * data/ 의 API 레퍼런스를 MCP 도구로 노출한다. 읽기 전용이며 네트워크·클러스터에 접근하지 않는다.

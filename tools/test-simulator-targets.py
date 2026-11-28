@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Exercise request targets and invalid resource links in a disposable browser profile."""
 import argparse
 import json

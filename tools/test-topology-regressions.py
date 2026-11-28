@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Exercise the topology controls and compare their selection with the rendered canvas data."""
 import argparse
 from pathlib import Path

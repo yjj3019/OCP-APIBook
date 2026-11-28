@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // Register the same skill from any checkout, without copying the catalog.
 const fs = require('node:fs');
 const os = require('node:os');

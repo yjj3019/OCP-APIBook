@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -196,6 +196,8 @@ test('배포 스킬의 메타데이터, 암시적 호출 정책과 로컬 스크
   assert.ok(header, 'SKILL.md frontmatter');
   const [metadata] = yamlParse(header[1]);
   assert.equal(metadata.name, name);
+  assert.equal(metadata.license, 'MIT');
+  assert.equal(fs.readFileSync(path.join(copied, 'LICENSE'), 'utf8'), fs.readFileSync(path.join(root, 'LICENSE'), 'utf8'));
   assert.ok(metadata.description.trim());
   const [ui] = yamlParse(fs.readFileSync(path.join(copied, 'agents', 'openai.yaml'), 'utf8'));
   assert.ok(ui.interface.display_name.trim());

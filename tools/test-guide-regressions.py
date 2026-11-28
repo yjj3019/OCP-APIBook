@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Exercise the published HTTP loader, global search, guide navigation and copy recovery."""
 import argparse
 import re

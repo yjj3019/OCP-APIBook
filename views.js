@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 화면들: 홈 · 탐색 · API 상세 · 버전 비교 · 가이드 · 토폴로지 · 시뮬레이터 */
 (function () {
   'use strict';
