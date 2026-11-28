@@ -19,7 +19,9 @@ function query([name, ...pairs]) {
     const schema = tool.inputSchema.properties;
     if (!Object.hasOwn(schema, key)) throw new Error(name + '에서 지원하지 않는 인자: ' + key);
     if (Object.hasOwn(args, key)) throw new Error('중복된 인자: ' + key);
-    if (schema[key].type === 'integer') {
+    if (name === 'validate_manifest' && key === 'manifest' && value === '-') {
+      args[key] = fs.readFileSync(0, 'utf8');
+    } else if (schema[key].type === 'integer') {
       if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(key + '에는 정수를 입력하세요.');
       args[key] = Number(value);
     } else {

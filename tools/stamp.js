@@ -9,7 +9,7 @@ function stageStamps(root, data, out) {
   const text = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   const sha = buf => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12);
 
-  const CODE = ['app.css', 'sim.css', 'ui-kit.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js'];
+  const CODE = ['app.css', 'sim.css', 'ui-kit.js', 'locale.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js'];
   const LAZY = ['graph.js', 'viz.js', 'topo.js', 'sim.js'];
   const { isDataFile, pageLoader, loaderHash } = require('./site-files');
   const hashes = {};
@@ -31,8 +31,8 @@ function stageStamps(root, data, out) {
   fs.writeFileSync(path.join(out, 'index.html'), html);
 
   // 사전 캐시 목록: index.html 이 참조하는 같은 출처 자원 + 지연 로딩 코드 + 기본 버전 핵심 데이터
-  const refs = [...html.matchAll(/(?:href|src)="([^"#]+)"/g)].map(m => m[1]).filter(u => !/^(https?:|data:|\/\/)/.test(u));
-  const pre = [...new Set(['./'].concat(refs, LAZY.map(assetUrl), [assetUrl(`data/${latest}.js`), assetUrl(`data/${latest}.fidx.js`)]))];
+  const refs = [...html.matchAll(/(?:href|src)="([^"#]+)"/g)].map(m => m[1]).filter(u => Object.hasOwn(hashes, u.split('?')[0]));
+  const pre = [...new Set(['./'].concat(refs, LAZY.map(assetUrl), [assetUrl('data/versions.js'), assetUrl(`data/${latest}.js`), assetUrl(`data/${latest}.fidx.js`)]))];
   const integrity = Object.fromEntries(Object.keys(hashes).map(file => [assetUrl(file), 'sha256-' + hashes[file]]));
   integrity['./'] = 'sha256-' + crypto.createHash('sha256').update(html).digest('base64');
 

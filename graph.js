@@ -1,100 +1,102 @@
 // SPDX-License-Identifier: Apache-2.0
 /* API 관계 그래프 데이터. 브라우저(window.ApiGraph)와 Node 양쪽에서 동작 */
 (function (root) {
+  const locale = typeof module !== 'undefined' && module.exports ? require('./locale') : root.ApiBookLocale;
+  const ui = locale.text;
   // 관계 종류. src: 'doc' = 이 문서의 텍스트에서 추출, 'name' = 이름 규칙, 'curated' = 일반적인 구조(문서 밖 지식)
   const TYPES = {
-    mention: { label: '문서에서 언급', src: 'doc' },
-    curated: { label: '일반 관계', src: 'curated' },
-    same:    { label: '같은 이름', src: 'name' },
-    variant: { label: '이름 변형', src: 'name' },
+    mention: { label: ui('문서에서 언급'), src: 'doc' },
+    curated: { label: ui('일반 관계'), src: 'curated' },
+    same:    { label: ui('같은 이름'), src: 'name' },
+    variant: { label: ui('이름 변형'), src: 'name' },
   };
 
   // [출발, 도착, 라벨]  — 'Kind@group' 으로 같은 이름 중 대상을 지정
   const R = 'rbac.authorization.k8s.io';
   const CURATED = [
     // 네트워크 노출
-    ['Route', 'Service', '트래픽 전달'], ['Service', 'Pod', '선택'], ['Service', 'Endpoints', '엔드포인트 생성'], ['Service', 'EndpointSlice', '슬라이스 생성'],
-    ['IngressController', 'Route', '처리'], ['IngressController', 'Service', 'LB 서비스 생성'], ['IngressController', 'DNSRecord', 'DNS 레코드 생성'],
-    ['Ingress@networking.k8s.io', 'Service', '전달'], ['Ingress@networking.k8s.io', 'IngressClass', '사용'],
-    ['Gateway', 'GatewayClass', '사용'], ['HTTPRoute', 'Gateway', '연결'], ['GRPCRoute', 'Gateway', '연결'], ['HTTPRoute', 'Service', '전달'], ['GRPCRoute', 'Service', '전달'], ['BackendTLSPolicy', 'Service', 'TLS 정책'], ['ReferenceGrant', 'Gateway', '교차 참조 허용'],
-    ['NetworkPolicy', 'Pod', '선택'], ['AdminNetworkPolicy', 'Namespace', '적용'], ['BaselineAdminNetworkPolicy', 'Namespace', '적용'], ['MultiNetworkPolicy', 'NetworkAttachmentDefinition', '적용'],
-    ['EgressFirewall', 'Namespace', '적용'], ['EgressIP', 'Namespace', '선택'], ['EgressIP', 'Pod', '선택'], ['EgressService', 'Service', '이그레스 지정'], ['EgressQoS', 'Namespace', '적용'],
-    ['UserDefinedNetwork', 'Namespace', '네트워크 제공'], ['ClusterUserDefinedNetwork', 'Namespace', '네트워크 제공'],
+    ['Route', 'Service', ui('트래픽 전달')], ['Service', 'Pod', locale.choice('선택', 'Selects')], ['Service', 'Endpoints', ui('엔드포인트 생성')], ['Service', 'EndpointSlice', ui('슬라이스 생성')],
+    ['IngressController', 'Route', ui('처리')], ['IngressController', 'Service', ui('LB 서비스 생성')], ['IngressController', 'DNSRecord', ui('DNS 레코드 생성')],
+    ['Ingress@networking.k8s.io', 'Service', ui('전달')], ['Ingress@networking.k8s.io', 'IngressClass', ui('사용')],
+    ['Gateway', 'GatewayClass', ui('사용')], ['HTTPRoute', 'Gateway', ui('연결')], ['GRPCRoute', 'Gateway', ui('연결')], ['HTTPRoute', 'Service', ui('전달')], ['GRPCRoute', 'Service', ui('전달')], ['BackendTLSPolicy', 'Service', ui('TLS 정책')], ['ReferenceGrant', 'Gateway', ui('교차 참조 허용')],
+    ['NetworkPolicy', 'Pod', locale.choice('선택', 'Selects')], ['AdminNetworkPolicy', 'Namespace', ui('적용')], ['BaselineAdminNetworkPolicy', 'Namespace', ui('적용')], ['MultiNetworkPolicy', 'NetworkAttachmentDefinition', ui('적용')],
+    ['EgressFirewall', 'Namespace', ui('적용')], ['EgressIP', 'Namespace', locale.choice('선택', 'Selects')], ['EgressIP', 'Pod', locale.choice('선택', 'Selects')], ['EgressService', 'Service', ui('이그레스 지정')], ['EgressQoS', 'Namespace', ui('적용')],
+    ['UserDefinedNetwork', 'Namespace', ui('네트워크 제공')], ['ClusterUserDefinedNetwork', 'Namespace', ui('네트워크 제공')],
     // 워크로드
-    ['Deployment', 'ReplicaSet', '생성'], ['ReplicaSet', 'Pod', '생성'], ['StatefulSet', 'Pod', '생성'], ['DaemonSet', 'Pod', '생성'], ['DaemonSet', 'ControllerRevision', '리비전 기록'],
-    ['Job', 'Pod', '생성'], ['CronJob', 'Job', '주기 생성'], ['DeploymentConfig', 'ReplicationController', '생성'], ['ReplicationController', 'Pod', '생성'],
-    ['HorizontalPodAutoscaler', 'Scale', '조정'], ['PodDisruptionBudget', 'Pod', '보호'],
-    ['Pod', 'PersistentVolumeClaim', '볼륨 마운트'], ['Pod', 'ConfigMap', '설정 사용'], ['Pod', 'Secret', '비밀 사용'], ['Pod', 'ServiceAccount', '실행 계정'], ['Pod', 'Node', '스케줄됨'],
-    ['DeploymentLog', 'DeploymentConfig', '로그'], ['DeploymentRequest', 'DeploymentConfig', '배포 요청'], ['DeploymentConfigRollback', 'DeploymentConfig', '롤백'],
+    ['Deployment', 'ReplicaSet', ui('생성')], ['ReplicaSet', 'Pod', ui('생성')], ['StatefulSet', 'Pod', ui('생성')], ['DaemonSet', 'Pod', ui('생성')], ['DaemonSet', 'ControllerRevision', ui('리비전 기록')],
+    ['Job', 'Pod', ui('생성')], ['CronJob', 'Job', ui('주기 생성')], ['DeploymentConfig', 'ReplicationController', ui('생성')], ['ReplicationController', 'Pod', ui('생성')],
+    ['HorizontalPodAutoscaler', 'Scale', ui('조정')], ['PodDisruptionBudget', 'Pod', ui('보호')],
+    ['Pod', 'PersistentVolumeClaim', ui('볼륨 마운트')], ['Pod', 'ConfigMap', ui('설정 사용')], ['Pod', 'Secret', ui('비밀 사용')], ['Pod', 'ServiceAccount', ui('실행 계정')], ['Pod', 'Node', ui('스케줄됨')],
+    ['DeploymentLog', 'DeploymentConfig', ui('로그')], ['DeploymentRequest', 'DeploymentConfig', ui('배포 요청')], ['DeploymentConfigRollback', 'DeploymentConfig', ui('롤백')],
     // 스토리지
-    ['PersistentVolumeClaim', 'PersistentVolume', '바인딩'], ['PersistentVolumeClaim', 'StorageClass', '클래스 사용'], ['PersistentVolume', 'StorageClass', '클래스 지정'], ['StorageClass', 'CSIDriver', '프로비저너'],
-    ['CSINode', 'CSIDriver', '드라이버 정보'], ['ClusterCSIDriver', 'CSIDriver', '관리'], ['VolumeSnapshot', 'VolumeSnapshotClass', '클래스 사용'], ['VolumeSnapshot', 'PersistentVolumeClaim', '원본'],
-    ['VolumeSnapshotContent', 'VolumeSnapshot', '실제 스냅샷'], ['VolumeAttachment', 'PersistentVolume', '노드에 연결'],
+    ['PersistentVolumeClaim', 'PersistentVolume', ui('바인딩')], ['PersistentVolumeClaim', 'StorageClass', ui('클래스 사용')], ['PersistentVolume', 'StorageClass', ui('클래스 지정')], ['StorageClass', 'CSIDriver', ui('프로비저너')],
+    ['CSINode', 'CSIDriver', ui('드라이버 정보')], ['ClusterCSIDriver', 'CSIDriver', ui('관리')], ['VolumeSnapshot', 'VolumeSnapshotClass', ui('클래스 사용')], ['VolumeSnapshot', 'PersistentVolumeClaim', ui('원본')],
+    ['VolumeSnapshotContent', 'VolumeSnapshot', ui('실제 스냅샷')], ['VolumeAttachment', 'PersistentVolume', ui('노드에 연결')],
     // 권한·인증
-    ['RoleBinding@' + R, 'Role@' + R, '역할 부여'], ['ClusterRoleBinding@' + R, 'ClusterRole@' + R, '역할 부여'],
-    ['RoleBinding@' + R, 'ServiceAccount', '주체'], ['RoleBinding@' + R, 'User', '주체'], ['RoleBinding@' + R, 'Group', '주체'],
-    ['ClusterRoleBinding@' + R, 'ServiceAccount', '주체'], ['ClusterRoleBinding@' + R, 'User', '주체'], ['ClusterRoleBinding@' + R, 'Group', '주체'],
-    ['SecurityContextConstraints', 'ServiceAccount', '허용 대상'], ['SecurityContextConstraints', 'User', '허용 대상'], ['SecurityContextConstraints', 'Group', '허용 대상'],
-    ['Identity', 'User', '사용자 매핑'], ['UserIdentityMapping', 'User', '매핑'], ['UserIdentityMapping', 'Identity', '매핑'], ['Group', 'User', '구성원'],
-    ['OAuthAccessToken', 'OAuthClient', '발급 클라이언트'], ['OAuthAccessToken', 'User', '사용자'], ['OAuthAuthorizeToken', 'OAuthClient', '발급 클라이언트'],
-    ['OAuthClientAuthorization', 'OAuthClient', '승인'], ['OAuthClientAuthorization', 'User', '승인 사용자'], ['UserOAuthAccessToken', 'OAuthAccessToken', '조회'],
-    ['ServiceAccount', 'Secret', '토큰'], ['TokenRequest', 'ServiceAccount', '토큰 발급'],
+    ['RoleBinding@' + R, 'Role@' + R, ui('역할 부여')], ['ClusterRoleBinding@' + R, 'ClusterRole@' + R, ui('역할 부여')],
+    ['RoleBinding@' + R, 'ServiceAccount', ui('주체')], ['RoleBinding@' + R, 'User', ui('주체')], ['RoleBinding@' + R, 'Group', ui('주체')],
+    ['ClusterRoleBinding@' + R, 'ServiceAccount', ui('주체')], ['ClusterRoleBinding@' + R, 'User', ui('주체')], ['ClusterRoleBinding@' + R, 'Group', ui('주체')],
+    ['SecurityContextConstraints', 'ServiceAccount', ui('허용 대상')], ['SecurityContextConstraints', 'User', ui('허용 대상')], ['SecurityContextConstraints', 'Group', ui('허용 대상')],
+    ['Identity', 'User', ui('사용자 매핑')], ['UserIdentityMapping', 'User', ui('매핑')], ['UserIdentityMapping', 'Identity', ui('매핑')], ['Group', 'User', ui('구성원')],
+    ['OAuthAccessToken', 'OAuthClient', ui('발급 클라이언트')], ['OAuthAccessToken', 'User', ui('사용자')], ['OAuthAuthorizeToken', 'OAuthClient', ui('발급 클라이언트')],
+    ['OAuthClientAuthorization', 'OAuthClient', ui('승인')], ['OAuthClientAuthorization', 'User', ui('승인 사용자')], ['UserOAuthAccessToken', 'OAuthAccessToken', ui('조회')],
+    ['ServiceAccount', 'Secret', ui('토큰')], ['TokenRequest', 'ServiceAccount', ui('토큰 발급')],
     // 프로젝트·쿼터
-    ['Project@project.openshift.io', 'Namespace', '1:1 대응'], ['ProjectRequest', 'Project@project.openshift.io', '생성'], ['ProjectHelmChartRepository', 'Project@project.openshift.io', '소속'],
-    ['ResourceQuota', 'Namespace', '제한'], ['LimitRange', 'Namespace', '제한'], ['ClusterResourceQuota', 'Namespace', '여러 네임스페이스 제한'], ['AppliedClusterResourceQuota', 'ClusterResourceQuota', '적용 결과'],
+    ['Project@project.openshift.io', 'Namespace', ui('1:1 대응')], ['ProjectRequest', 'Project@project.openshift.io', ui('생성')], ['ProjectHelmChartRepository', 'Project@project.openshift.io', ui('소속')],
+    ['ResourceQuota', 'Namespace', ui('제한')], ['LimitRange', 'Namespace', ui('제한')], ['ClusterResourceQuota', 'Namespace', ui('여러 네임스페이스 제한')], ['AppliedClusterResourceQuota', 'ClusterResourceQuota', ui('적용 결과')],
     // 머신·노드
-    ['MachineSet', 'Machine', '생성'], ['ControlPlaneMachineSet', 'Machine', '생성'], ['Machine', 'Node', '대응'], ['MachineAutoscaler', 'MachineSet', '크기 조정'], ['ClusterAutoscaler', 'MachineAutoscaler', '연동'],
-    ['MachineHealthCheck', 'Machine', '감시'], ['MachineHealthCheck', 'Node', '감시'],
-    ['MachineConfigPool', 'MachineConfig', '선택'], ['MachineConfigPool', 'Node', '대상'], ['KubeletConfig', 'MachineConfigPool', '대상'], ['ContainerRuntimeConfig', 'MachineConfigPool', '대상'],
-    ['MachineConfigNode', 'Node', '노드 상태'], ['MachineConfigNode', 'MachineConfigPool', '풀 소속'], ['ControllerConfig', 'MachineConfig', '렌더링'],
-    ['MachineOSConfig', 'MachineConfigPool', '대상'], ['MachineOSBuild', 'MachineOSConfig', '빌드 결과'], ['PinnedImageSet', 'MachineConfigPool', '대상'], ['PerformanceProfile', 'MachineConfigPool', '대상'],
-    ['Tuned', 'Profile', '생성'], ['Profile', 'Node', '적용'],
-    ['BareMetalHost', 'Machine', '호스트 매칭'], ['Provisioning', 'BareMetalHost', '프로비저닝'], ['BareMetalHost', 'HostFirmwareSettings', '펌웨어 설정'], ['BareMetalHost', 'HardwareData', '하드웨어 정보'],
-    ['BareMetalHost', 'FirmwareSchema', '펌웨어 스키마'], ['BareMetalHost', 'HostFirmwareComponents', '펌웨어 구성'], ['BareMetalHost', 'PreprovisioningImage', '부팅 이미지'], ['BareMetalHost', 'DataImage', '데이터 이미지'],
-    ['BMCEventSubscription', 'BareMetalHost', '이벤트 구독'], ['HostUpdatePolicy', 'BareMetalHost', '업데이트 정책'], ['Metal3RemediationTemplate', 'Metal3Remediation', '템플릿'],
+    ['MachineSet', 'Machine', ui('생성')], ['ControlPlaneMachineSet', 'Machine', ui('생성')], ['Machine', 'Node', ui('대응')], ['MachineAutoscaler', 'MachineSet', ui('크기 조정')], ['ClusterAutoscaler', 'MachineAutoscaler', ui('연동')],
+    ['MachineHealthCheck', 'Machine', ui('감시')], ['MachineHealthCheck', 'Node', ui('감시')],
+    ['MachineConfigPool', 'MachineConfig', locale.choice('선택', 'Selects')], ['MachineConfigPool', 'Node', locale.choice('대상', 'Targets')], ['KubeletConfig', 'MachineConfigPool', locale.choice('대상', 'Targets')], ['ContainerRuntimeConfig', 'MachineConfigPool', locale.choice('대상', 'Targets')],
+    ['MachineConfigNode', 'Node', ui('노드 상태')], ['MachineConfigNode', 'MachineConfigPool', ui('풀 소속')], ['ControllerConfig', 'MachineConfig', ui('렌더링')],
+    ['MachineOSConfig', 'MachineConfigPool', locale.choice('대상', 'Targets')], ['MachineOSBuild', 'MachineOSConfig', ui('빌드 결과')], ['PinnedImageSet', 'MachineConfigPool', locale.choice('대상', 'Targets')], ['PerformanceProfile', 'MachineConfigPool', locale.choice('대상', 'Targets')],
+    ['Tuned', 'Profile', ui('생성')], ['Profile', 'Node', ui('적용')],
+    ['BareMetalHost', 'Machine', ui('호스트 매칭')], ['Provisioning', 'BareMetalHost', ui('프로비저닝')], ['BareMetalHost', 'HostFirmwareSettings', ui('펌웨어 설정')], ['BareMetalHost', 'HardwareData', ui('하드웨어 정보')],
+    ['BareMetalHost', 'FirmwareSchema', ui('펌웨어 스키마')], ['BareMetalHost', 'HostFirmwareComponents', ui('펌웨어 구성')], ['BareMetalHost', 'PreprovisioningImage', ui('부팅 이미지')], ['BareMetalHost', 'DataImage', ui('데이터 이미지')],
+    ['BMCEventSubscription', 'BareMetalHost', ui('이벤트 구독')], ['HostUpdatePolicy', 'BareMetalHost', ui('업데이트 정책')], ['Metal3RemediationTemplate', 'Metal3Remediation', ui('템플릿')],
     // 클러스터·OLM
-    ['ClusterVersion', 'ClusterOperator', '관리'], ['Etcd', 'ClusterOperator', '상태 보고'], ['KubeAPIServer', 'ClusterOperator', '상태 보고'], ['KubeControllerManager', 'ClusterOperator', '상태 보고'],
-    ['KubeScheduler', 'ClusterOperator', '상태 보고'], ['OpenShiftAPIServer', 'ClusterOperator', '상태 보고'], ['OpenShiftControllerManager', 'ClusterOperator', '상태 보고'], ['Scheduler', 'KubeScheduler', '설정'],
-    ['Subscription', 'CatalogSource', '소스'], ['Subscription', 'InstallPlan', '생성'], ['InstallPlan', 'ClusterServiceVersion', '설치'], ['ClusterServiceVersion', 'CustomResourceDefinition', '제공'],
-    ['ClusterServiceVersion', 'OperatorGroup', '소속'], ['OperatorGroup', 'Namespace', '대상'], ['OperatorCondition', 'ClusterServiceVersion', '상태'], ['PackageManifest', 'CatalogSource', '출처'],
-    ['OperatorHub', 'CatalogSource', '기본 소스'], ['ClusterExtension', 'ClusterCatalog', '카탈로그'], ['CloudCredential', 'CredentialsRequest', '처리'], ['CredentialsRequest', 'Secret', '생성'],
+    ['ClusterVersion', 'ClusterOperator', ui('관리')], ['Etcd', 'ClusterOperator', ui('상태 보고')], ['KubeAPIServer', 'ClusterOperator', ui('상태 보고')], ['KubeControllerManager', 'ClusterOperator', ui('상태 보고')],
+    ['KubeScheduler', 'ClusterOperator', ui('상태 보고')], ['OpenShiftAPIServer', 'ClusterOperator', ui('상태 보고')], ['OpenShiftControllerManager', 'ClusterOperator', ui('상태 보고')], ['Scheduler', 'KubeScheduler', ui('설정')],
+    ['Subscription', 'CatalogSource', ui('소스')], ['Subscription', 'InstallPlan', ui('생성')], ['InstallPlan', 'ClusterServiceVersion', ui('설치')], ['ClusterServiceVersion', 'CustomResourceDefinition', ui('제공')],
+    ['ClusterServiceVersion', 'OperatorGroup', ui('소속')], ['OperatorGroup', 'Namespace', locale.choice('대상', 'Targets')], ['OperatorCondition', 'ClusterServiceVersion', ui('상태')], ['PackageManifest', 'CatalogSource', ui('출처')],
+    ['OperatorHub', 'CatalogSource', ui('기본 소스')], ['ClusterExtension', 'ClusterCatalog', ui('카탈로그')], ['CloudCredential', 'CredentialsRequest', ui('처리')], ['CredentialsRequest', 'Secret', ui('생성')],
     // 이미지·빌드
-    ['ImageStream', 'ImageStreamTag', '태그'], ['ImageStreamTag', 'ImageStreamImage', '가리킴'], ['ImageStreamImage', 'Image@image.openshift.io', '메타데이터'], ['ImageStreamImport', 'ImageStream', '가져오기'],
-    ['ImageStreamMapping', 'ImageStream', '매핑'], ['ImageStreamLayers', 'ImageStream', '레이어'], ['ImageSignature', 'Image@image.openshift.io', '서명'], ['ImageTag', 'ImageStream', '태그'],
-    ['BuildConfig', 'Build@build.openshift.io', '실행 생성'], ['BuildConfig', 'ImageStream', '결과 푸시'], ['BuildLog', 'Build@build.openshift.io', '로그'], ['BuildRequest', 'BuildConfig', '실행 요청'],
-    ['DeploymentConfig', 'ImageStream', '이미지 트리거'], ['ImageDigestMirrorSet', 'MachineConfig', '노드 설정 반영'], ['ImageTagMirrorSet', 'MachineConfig', '노드 설정 반영'], ['ImagePruner', 'ImageStream', '정리'],
+    ['ImageStream', 'ImageStreamTag', ui('태그')], ['ImageStreamTag', 'ImageStreamImage', ui('가리킴')], ['ImageStreamImage', 'Image@image.openshift.io', ui('메타데이터')], ['ImageStreamImport', 'ImageStream', ui('가져오기')],
+    ['ImageStreamMapping', 'ImageStream', ui('매핑')], ['ImageStreamLayers', 'ImageStream', ui('레이어')], ['ImageSignature', 'Image@image.openshift.io', ui('서명')], ['ImageTag', 'ImageStream', ui('태그')],
+    ['BuildConfig', 'Build@build.openshift.io', ui('실행 생성')], ['BuildConfig', 'ImageStream', ui('결과 푸시')], ['BuildLog', 'Build@build.openshift.io', ui('로그')], ['BuildRequest', 'BuildConfig', ui('실행 요청')],
+    ['DeploymentConfig', 'ImageStream', ui('이미지 트리거')], ['ImageDigestMirrorSet', 'MachineConfig', ui('노드 설정 반영')], ['ImageTagMirrorSet', 'MachineConfig', ui('노드 설정 반영')], ['ImagePruner', 'ImageStream', ui('정리')],
     // 템플릿
-    ['TemplateInstance', 'Template', '원본'], ['BrokerTemplateInstance', 'TemplateInstance', '대응'],
+    ['TemplateInstance', 'Template', ui('원본')], ['BrokerTemplateInstance', 'TemplateInstance', ui('대응')],
     // 모니터링
-    ['Prometheus', 'ServiceMonitor', '수집 대상'], ['Prometheus', 'PodMonitor', '수집 대상'], ['Prometheus', 'Probe', '수집 대상'], ['Prometheus', 'PrometheusRule', '규칙'], ['Prometheus', 'Alertmanager', '알림 전송'],
-    ['Alertmanager', 'AlertmanagerConfig', '설정'], ['ThanosRuler', 'PrometheusRule', '규칙'], ['ServiceMonitor', 'Service', '모니터링'], ['PodMonitor', 'Pod', '모니터링'], ['AlertingRule', 'PrometheusRule', '규칙 생성'],
+    ['Prometheus', 'ServiceMonitor', ui('수집 대상')], ['Prometheus', 'PodMonitor', ui('수집 대상')], ['Prometheus', 'Probe', ui('수집 대상')], ['Prometheus', 'PrometheusRule', ui('규칙')], ['Prometheus', 'Alertmanager', ui('알림 전송')],
+    ['Alertmanager', 'AlertmanagerConfig', ui('설정')], ['ThanosRuler', 'PrometheusRule', ui('규칙')], ['ServiceMonitor', 'Service', ui('모니터링')], ['PodMonitor', 'Pod', ui('모니터링')], ['AlertingRule', 'PrometheusRule', ui('규칙 생성')],
     // 콘솔
-    ['ConsolePlugin', 'Console@operator.openshift.io', '확장'], ['ConsoleLink', 'Console@config.openshift.io', '표시'], ['ConsoleCLIDownload', 'Console@config.openshift.io', '표시'],
-    ['ConsoleNotification', 'Console@config.openshift.io', '표시'], ['ConsoleQuickStart', 'Console@config.openshift.io', '표시'], ['ConsoleExternalLogLink', 'Console@config.openshift.io', '표시'],
+    ['ConsolePlugin', 'Console@operator.openshift.io', ui('확장')], ['ConsoleLink', 'Console@config.openshift.io', ui('표시')], ['ConsoleCLIDownload', 'Console@config.openshift.io', ui('표시')],
+    ['ConsoleNotification', 'Console@config.openshift.io', ui('표시')], ['ConsoleQuickStart', 'Console@config.openshift.io', ui('표시')], ['ConsoleExternalLogLink', 'Console@config.openshift.io', ui('표시')],
     // 어드미션·확장
-    ['ValidatingAdmissionPolicyBinding', 'ValidatingAdmissionPolicy', '정책 연결'], ['ValidatingWebhookConfiguration', 'Service', '웹훅 호출'], ['MutatingWebhookConfiguration', 'Service', '웹훅 호출'],
-    ['APIService', 'Service', '요청 위임'],
+    ['ValidatingAdmissionPolicyBinding', 'ValidatingAdmissionPolicy', ui('정책 연결')], ['ValidatingWebhookConfiguration', 'Service', ui('웹훅 호출')], ['MutatingWebhookConfiguration', 'Service', ui('웹훅 호출')],
+    ['APIService', 'Service', ui('요청 위임')],
     // 확장 네트워크·IPAM
-    ['AdminPolicyBasedExternalRoute', 'Namespace', '적용'], ['AdminPolicyBasedExternalRoute', 'Pod', '게이트웨이 선택'], ['CloudPrivateIPConfig', 'EgressIP', '클라우드 IP 할당'], ['EgressRouter', 'Pod', '라우터 생성'], ['EgressFirewall', 'DNSNameResolver', '도메인 해석'],
-    ['NetworkAttachmentDefinition', 'IPPool@whereabouts.cni.cncf.io', 'IP 할당 기록'], ['NodeSlicePool', 'NetworkAttachmentDefinition', '노드별 슬라이스'], ['OverlappingRangeIPReservation', 'IPPool@whereabouts.cni.cncf.io', '중복 범위 예약'],
-    ['IPAMClaim', 'NetworkAttachmentDefinition', '고정 IP 예약'], ['Service', 'IPAddress@networking.k8s.io', '클러스터 IP 할당'],
+    ['AdminPolicyBasedExternalRoute', 'Namespace', ui('적용')], ['AdminPolicyBasedExternalRoute', 'Pod', ui('게이트웨이 선택')], ['CloudPrivateIPConfig', 'EgressIP', ui('클라우드 IP 할당')], ['EgressRouter', 'Pod', ui('라우터 생성')], ['EgressFirewall', 'DNSNameResolver', ui('도메인 해석')],
+    ['NetworkAttachmentDefinition', 'IPPool@whereabouts.cni.cncf.io', ui('IP 할당 기록')], ['NodeSlicePool', 'NetworkAttachmentDefinition', ui('노드별 슬라이스')], ['OverlappingRangeIPReservation', 'IPPool@whereabouts.cni.cncf.io', ui('중복 범위 예약')],
+    ['IPAMClaim', 'NetworkAttachmentDefinition', ui('고정 IP 예약')], ['Service', 'IPAddress@networking.k8s.io', ui('클러스터 IP 할당')],
     // DRA(동적 리소스 할당)
-    ['Pod', 'ResourceClaim', '장치 요청'], ['Pod', 'ResourceClaimTemplate', '장치 요청 템플릿'], ['ResourceClaim', 'DeviceClass', '장치 클래스 사용'], ['ResourceClaim', 'ResourceSlice', '장치 할당'], ['ResourceSlice', 'Node', '노드 장치 목록'],
+    ['Pod', 'ResourceClaim', ui('장치 요청')], ['Pod', 'ResourceClaimTemplate', ui('장치 요청 템플릿')], ['ResourceClaim', 'DeviceClass', ui('장치 클래스 사용')], ['ResourceClaim', 'ResourceSlice', ui('장치 할당')], ['ResourceSlice', 'Node', ui('노드 장치 목록')],
     // 코어 부가 리소스
-    ['Binding', 'Pod', '바인딩'], ['Binding', 'Node', '스케줄 대상'], ['Eviction@policy', 'Pod', '축출'], ['Eviction@policy', 'PodDisruptionBudget', '예산 확인'],
-    ['Pod', 'PriorityClass', '우선순위'], ['Pod', 'RuntimeClass', '런타임 클래스'], ['FlowSchema', 'PriorityLevelConfiguration', '우선순위 지정'], ['Lease@coordination.k8s.io', 'Node', '노드 하트비트'],
-    ['NodeMetrics', 'Node', '지표'], ['PodMetrics', 'Pod', '지표'], ['PersistentVolumeClaim', 'VolumePopulator', '데이터 소스'], ['TokenReview', 'User', '토큰 검증'],
-    ['StorageVersionMigration', 'StorageState', '상태 기록'], ['KubeStorageVersionMigrator', 'StorageVersionMigration', '관리'],
+    ['Binding', 'Pod', ui('바인딩')], ['Binding', 'Node', ui('스케줄 대상')], ['Eviction@policy', 'Pod', ui('축출')], ['Eviction@policy', 'PodDisruptionBudget', ui('예산 확인')],
+    ['Pod', 'PriorityClass', ui('우선순위')], ['Pod', 'RuntimeClass', ui('런타임 클래스')], ['FlowSchema', 'PriorityLevelConfiguration', ui('우선순위 지정')], ['Lease@coordination.k8s.io', 'Node', ui('노드 하트비트')],
+    ['NodeMetrics', 'Node', ui('지표')], ['PodMetrics', 'Pod', ui('지표')], ['PersistentVolumeClaim', 'VolumePopulator', ui('데이터 소스')], ['TokenReview', 'User', ui('토큰 검증')],
+    ['StorageVersionMigration', 'StorageState', ui('상태 기록')], ['KubeStorageVersionMigrator', 'StorageVersionMigration', ui('관리')],
     // 보안·설정
-    ['PodSecurityPolicyReview', 'SecurityContextConstraints', '평가'], ['PodSecurityPolicySubjectReview', 'SecurityContextConstraints', '평가'], ['PodSecurityPolicySelfSubjectReview', 'SecurityContextConstraints', '평가'],
-    ['RangeAllocation', 'Namespace', 'UID 범위 기록'], ['RoleBindingRestriction', 'RoleBinding@' + R, '대상 제한'], ['OAuth', 'OAuthAccessToken', '토큰 설정'], ['Proxy', 'ConfigMap', '신뢰 CA'],
-    ['ImageContentSourcePolicy', 'ImageDigestMirrorSet', '후속 API'],
+    ['PodSecurityPolicyReview', 'SecurityContextConstraints', ui('평가')], ['PodSecurityPolicySubjectReview', 'SecurityContextConstraints', ui('평가')], ['PodSecurityPolicySelfSubjectReview', 'SecurityContextConstraints', ui('평가')],
+    ['RangeAllocation', 'Namespace', ui('UID 범위 기록')], ['RoleBindingRestriction', 'RoleBinding@' + R, ui('대상 제한')], ['OAuth', 'OAuthAccessToken', ui('토큰 설정')], ['Proxy', 'ConfigMap', ui('신뢰 CA')],
+    ['ImageContentSourcePolicy', 'ImageDigestMirrorSet', ui('후속 API')],
     // 클러스터 오퍼레이터 상태 보고
-    ['Storage', 'ClusterOperator', '상태 보고'], ['ServiceCA', 'ClusterOperator', '상태 보고'], ['CSISnapshotController', 'ClusterOperator', '상태 보고'], ['KubeStorageVersionMigrator', 'ClusterOperator', '상태 보고'],
-    ['MachineConfiguration', 'ClusterOperator', '상태 보고'], ['InsightsOperator', 'ClusterOperator', '상태 보고'], ['OLM', 'ClusterOperator', '상태 보고'],
-    ['OLMConfig', 'ClusterServiceVersion', '복사 CSV 설정'], ['Operator@operators.coreos.com', 'ClusterServiceVersion', '구성 요소 집계'], ['Operator@operators.coreos.com', 'Subscription', '구성 요소 집계'],
-    ['Backup', 'Etcd', '정기 백업 설정'], ['EtcdBackup', 'Etcd', '백업 대상'], ['ClusterMonitoring', 'Prometheus', '설정'], ['ClusterMonitoring', 'Alertmanager', '설정'], ['AlertRelabelConfig', 'Prometheus', '알림 재레이블'],
-    ['ConsoleSample', 'Console@config.openshift.io', '표시'], ['ConsoleYAMLSample', 'Console@config.openshift.io', '표시'],
+    ['Storage', 'ClusterOperator', ui('상태 보고')], ['ServiceCA', 'ClusterOperator', ui('상태 보고')], ['CSISnapshotController', 'ClusterOperator', ui('상태 보고')], ['KubeStorageVersionMigrator', 'ClusterOperator', ui('상태 보고')],
+    ['MachineConfiguration', 'ClusterOperator', ui('상태 보고')], ['InsightsOperator', 'ClusterOperator', ui('상태 보고')], ['OLM', 'ClusterOperator', ui('상태 보고')],
+    ['OLMConfig', 'ClusterServiceVersion', ui('복사 CSV 설정')], ['Operator@operators.coreos.com', 'ClusterServiceVersion', ui('구성 요소 집계')], ['Operator@operators.coreos.com', 'Subscription', ui('구성 요소 집계')],
+    ['Backup', 'Etcd', ui('정기 백업 설정')], ['EtcdBackup', 'Etcd', ui('백업 대상')], ['ClusterMonitoring', 'Prometheus', ui('설정')], ['ClusterMonitoring', 'Alertmanager', ui('설정')], ['AlertRelabelConfig', 'Prometheus', ui('알림 재레이블')],
+    ['ConsoleSample', 'Console@config.openshift.io', ui('표시')], ['ConsoleYAMLSample', 'Console@config.openshift.io', ui('표시')],
   ];
 
   // 단어 하나짜리 일반 영어와 겹쳐 오탐이 많은 이름은 본문 언급 추출에서 제외
@@ -173,7 +175,7 @@
             if (!STRICT_OK.test(ctx) || atStart) continue;
           } else if (/^[A-Z][a-z]+$/.test(kind) && atStart) continue; // 문장 첫머리의 일반 단어
           if (MENTION_SKIP.has(a.kind + '>' + kind)) continue;
-          const t = pick(kind, n, (MENTION_PREF[a.group] || {})[kind]); if (t) add(n, t, 'mention', part.w === 'desc' ? '설명에 언급' : `${part.w} 필드에 언급`, 1);
+          const t = pick(kind, n, (MENTION_PREF[a.group] || {})[kind]); if (t) add(n, t, 'mention', part.w === 'desc' ? ui('설명에 언급') : ui`${part.w} 필드에 언급`, 1);
         }
       }
     });
@@ -183,6 +185,27 @@
     return { nodes, edges, byId, adj, TYPES };
   }
 
-  const api = { create, TYPES, CURATED };
+  function shortestPath(graph, from, to, types) {
+    if (!graph.byId.has(from) || !graph.byId.has(to)) return null;
+    const queue = [from], parents = new Map([[from, null]]);
+    for (let i = 0; i < queue.length && !parents.has(to); i++) {
+      const id = queue[i];
+      const edges = graph.adj.get(id).filter(e => types[e.type] && (e.s === id || e.type === 'same'));
+      edges.sort((a, b) => Number(b.type === 'curated') - Number(a.type === 'curated'));
+      for (const edge of edges) {
+        const next = edge.s === id ? edge.t : edge.s;
+        if (parents.has(next)) continue;
+        parents.set(next, { id, edge }); queue.push(next);
+      }
+    }
+    if (!parents.has(to)) return null;
+    const steps = [];
+    for (let id = to; id !== from;) {
+      const parent = parents.get(id);
+      steps.push({ from: parent.id, to: id, edge: parent.edge }); id = parent.id;
+    }
+    return steps.reverse();
+  }
+  const api = { create, shortestPath, TYPES, CURATED };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ApiGraph = api;
 })(typeof window !== 'undefined' ? window : globalThis);

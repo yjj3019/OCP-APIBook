@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 const fs = require('fs'), path = require('path');
-const publicFiles = new Set(['index.html', 'sw.js', 'app.css', 'sim.css', 'ui-kit.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js', 'LICENSE', 'NOTICE']);
+const publicFiles = new Set(['index.html', 'sw.js', 'app.css', 'sim.css', 'ui-kit.js', 'locale.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js', 'LICENSE', 'NOTICE']);
 const isDataFile = name => /^(?:merged|legacy|versions|\d+\.\d+(?:\.fidx|\.fields\.[a-z0-9_]+)?)\.js$/.test(name);
 // Embedded by stamp.js so loading the first script does not itself require a file:// SRI request.
 function loadPageAssets() {
@@ -14,9 +14,26 @@ function loadPageAssets() {
     document.head.appendChild(link);
   }
   document.addEventListener('DOMContentLoaded', () => {
+    function showLoadError() {
+      const main = document.getElementById('main');
+      if (document.getElementById('startup-reload')) return;
+      // This path also handles failure of locale.js or boot.js itself.
+      const en = new URLSearchParams(location.search).get('lang') === 'en';
+      const message = document.createElement('p');
+      message.setAttribute('role', 'alert');
+      message.textContent = en ? 'Could not load the catalog.' : '카탈로그를 불러오지 못했습니다.';
+      const reload = document.createElement('button');
+      reload.id = 'startup-reload';
+      reload.className = 'btn ghost';
+      reload.textContent = en ? 'Reload page' : '페이지 새로고침';
+      reload.addEventListener('click', () => location.reload());
+      main.lang = en ? 'en' : 'ko';
+      main.replaceChildren(message, reload);
+    }
     for (const source of document.getElementById('page-assets').content.children) {
       const script = document.createElement('script');
       script.async = false; // Execute dependencies in document order.
+      script.onerror = showLoadError;
       if (!local) script.integrity = source.integrity;
       script.src = source.getAttribute('src');
       document.head.appendChild(script);

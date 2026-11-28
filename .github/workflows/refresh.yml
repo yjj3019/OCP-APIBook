@@ -17,6 +17,9 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -43,3 +46,35 @@ jobs:
           retention-days: 14
       - name: Check newly extracted constraints
         run: node tools/cons-audit.js --strict
+
+      - run: node tools/test-build.js
+      - run: node --test tools/test-publication.js
+      - run: node --test tools/test-skill-catalog.js
+      - name: Summarize source revisions
+        run: node tools/refresh/report.cjs > "$RUNNER_TEMP/catalog-changes.md"
+      - name: Check catalog PR credentials
+        id: pr_access
+        env:
+          CATALOG_PR_TOKEN: ${{ secrets.CATALOG_PR_TOKEN }}
+          HAS_CHANGES: ${{ steps.changes.outputs.found }}
+        run: |
+          if [[ -n "$CATALOG_PR_TOKEN" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$HAS_CHANGES" == 'true' ]]; then
+            echo '::error::CATALOG_PR_TOKEN is missing. The verified catalog is available in the refreshed-api-catalog artifact.'
+            exit 1
+          fi
+      - name: Create or update the catalog PR
+        if: steps.pr_access.outputs.ready == 'true'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          token: ${{ secrets.CATALOG_PR_TOKEN }}
+          branch: automation/refresh-api-catalog
+          base: ${{ github.event.repository.default_branch }}
+          title: "API 카탈로그 원본 갱신"
+          commit-message: "Refresh the verified OpenShift API catalog"
+          body-path: ${{ runner.temp }}/catalog-changes.md
+          add-paths: |
+            data/
+            index.html
+            sw.js

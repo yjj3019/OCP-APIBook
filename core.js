@@ -2,6 +2,7 @@
 /* 앱 코어: 상태·저장소·지연 로딩·통합 검색 엔진·라우터·셸(사이드바/테마/토스트) */
 (function () {
   'use strict';
+  const ui = window.ApiBookLocale.text;
   const App = window.App = { V: (window.MERGED && window.MERGED.build) || '0', views: {}, U: {}, ENG: {}, t0: performance.now() };
   const $ = App.$ = (s, r) => (r || document).querySelector(s);
   App.$$ = (s, r) => [...(r || document).querySelectorAll(s)];
@@ -11,7 +12,17 @@
   App.firstSent = t => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.split(/(?<=[.!?])\s+(?=[A-Z])/)[0] || t; };
   App.hlz = (s, H) => esc(H(s)).replace(/\u0001/g, '<mark>').replace(/\u0002/g, '</mark>');
   App.hi = (text, lang) => (window.Hi ? Hi.auto(text, lang) : esc(text));
-  App.fmt = n => Number(n).toLocaleString('ko-KR');
+  App.locale = window.ApiBookLocale.language;
+  App.categories = App.locale === 'ko' ? ApiSearch.CAT_KO : {
+    network_apis: 'Networking', monitoring_apis: 'Monitoring', metadata_apis: 'Metadata',
+    config_apis: 'Cluster configuration', extension_apis: 'Extensions', schedule_and_quota_apis: 'Scheduling and quotas',
+    operator_apis: 'Operators', provisioning_apis: 'Provisioning', template_apis: 'Templates',
+    workloads_apis: 'Workloads', operatorhub_apis: 'OperatorHub', security_apis: 'Security',
+    autoscale_apis: 'Autoscaling', role_apis: 'Roles', rbac_apis: 'RBAC', console_apis: 'Console',
+    machine_apis: 'Machines', storage_apis: 'Storage', policy_apis: 'Policy', user_and_group_apis: 'Users and groups',
+    image_apis: 'Images', authorization_apis: 'Authorization', node_apis: 'Nodes', oauth_apis: 'OAuth', project_apis: 'Projects', cluster_apis: 'Cluster API'
+  };
+  App.fmt = n => Number(n).toLocaleString(App.locale);
 
   /* ---------- 안전한 HTML(원문 가이드) · URL ---------- */
   App.safeUrl = u => (/^https:\/\/docs\.redhat\.com\//.test(String(u)) ? String(u) : '#');
@@ -54,9 +65,59 @@
   const bar = { n: 0, t: 0, start() { const b = $('#bar'); this.n++; b.style.opacity = 1; b.style.width = '28%'; clearTimeout(this.t); this.t = setTimeout(() => { b.style.width = '70%'; }, 250); },
     done() { if (--this.n > 0) return; clearTimeout(this.t); const b = $('#bar'); b.style.width = '100%'; setTimeout(() => { b.style.opacity = 0; b.style.width = '0'; }, 220); } };
   App.bar = bar;
-  App.copy = (text, btn) => {
-    const ok = () => { App.toast('클립보드에 복사했습니다', 'check'); if (btn) { const o = btn.innerHTML; btn.innerHTML = App.ic('check', 14) + ' 복사됨'; setTimeout(() => { btn.innerHTML = o; }, 1200); } };
-    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(ok).catch(() => { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { App.toast('복사하지 못했습니다'); } ta.remove(); });
+  const copyFeedback = new WeakMap();
+  App.copy = async (text, btn) => {
+    const trigger = btn || document.activeElement;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.readOnly = true;
+      field.className = 'clipboard-fallback';
+      field.setAttribute('aria-label', ui('복사할 내용'));
+      document.body.appendChild(field);
+      field.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch { /* The browser may deny both APIs. */ }
+      field.remove();
+      trigger?.focus?.({ preventScroll: true });
+      if (!copied) {
+        const previous = btn && copyFeedback.get(btn);
+        if (previous) {
+          clearTimeout(previous.timer);
+          btn.innerHTML = previous.original;
+          copyFeedback.delete(btn);
+        }
+        App.toast(ui('복사하지 못했습니다'));
+        const dialog = document.createElement('dialog');
+        dialog.className = 'manual-copy';
+        dialog.setAttribute('aria-label', ui('복사하지 못했습니다'));
+        const message = document.createElement('p');
+        message.textContent = ui('자동 복사에 실패했습니다. 선택한 내용을 직접 복사하세요.');
+        const close = document.createElement('button');
+        close.className = 'btn ghost';
+        close.textContent = ui('닫기');
+        close.onclick = () => dialog.close();
+        field.className = '';
+        dialog.append(message, field, close);
+        document.body.appendChild(dialog);
+        dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus?.({ preventScroll: true }); }, { once: true });
+        dialog.showModal();
+        field.focus();
+        field.select();
+        return false;
+      }
+    }
+    App.toast(ui('클립보드에 복사했습니다'), 'check');
+    if (btn) {
+      const state = copyFeedback.get(btn) || { original: btn.innerHTML };
+      clearTimeout(state.timer);
+      btn.innerHTML = App.ic('check', 14) + ui(' 복사됨');
+      state.timer = setTimeout(() => { btn.innerHTML = state.original; copyFeedback.delete(btn); }, 1200);
+      copyFeedback.set(btn, state);
+    }
+    return true;
   };
 
   /* ---------- 지연 로딩 ---------- */
@@ -66,11 +127,11 @@
   App.lazy = (...srcs) => Promise.all(srcs.map(s => loaded[s] || (loaded[s] = new Promise((ok, no) => {
     const e = document.createElement('script');
     const hash = hashes[s];
-    if (!hash) return no(new Error('현재 페이지의 파일 목록에 없습니다. 페이지를 새로고침해 주세요.'));
+    if (!hash) return no(new Error(ui('현재 페이지의 파일 목록에 없습니다. 페이지를 새로고침해 주세요.')));
     if (location.protocol !== 'file:') e.integrity = 'sha256-' + hash;
     e.src = s + '?v=' + hash.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     e.onload = ok;
-    e.onerror = () => { delete loaded[s]; no(new Error(s + ' 로드 실패. 페이지를 새로고침해 주세요.')); };
+    e.onerror = () => { delete loaded[s]; no(new Error(s + ui(' 로드 실패. 페이지를 새로고침해 주세요.'))); };
     document.head.appendChild(e);
   }))));
   App.lazyGraph = () => App.lazy('graph.js', 'viz.js', 'topo.js');
@@ -82,8 +143,8 @@
   App.loadCore = async v => {
     if (DB[v] && window.FIDX && FIDX[v]) return;
     const a = `data/${v}.js`, b = `data/${v}.fidx.js`;
-    try { await App.lazy(a, b); if (!DB[v] || !window.FIDX || !FIDX[v]) throw new Error('손상'); }
-    catch (e) { App.unlazy(a, b); throw new Error('데이터 파일을 불러오지 못했거나 손상되었습니다'); }   // 구문 오류도 load 이벤트가 오므로 전역 값을 확인한다
+    try { await App.lazy(a, b); if (!DB[v] || !window.FIDX || !FIDX[v]) throw new Error(ui('손상')); }
+    catch (e) { App.unlazy(a, b); throw new Error(ui('데이터 파일을 불러오지 못했거나 손상되었습니다')); }   // 구문 오류도 load 이벤트가 오므로 전역 값을 확인한다
   };
   /* 필드 상세는 data/<버전>.fields.<book>.js 로 나뉘어 있고, 같은 전역 맵 FIELDS[버전]에 병합된다 */
   App.fields = v => { window.FIELDS = window.FIELDS || {}; return window.FIELDS[v] || (window.FIELDS[v] = {}); };
@@ -139,30 +200,30 @@
   App.hrefFor = (a, want) => { const v = App.pickVer(a.m, want || App.ver); return `#${want || App.ver}/api:${a.m.id[v]}`; };
   App.fieldRelease = versions => versions?.includes(App.ver) ? App.ver : versions?.[0];
   App.stab = gv => /alpha/i.test(gv) ? 'alpha' : /beta/i.test(gv) ? 'beta' : 'ga';
-  App.STAB = { ga: ['GA', '안정 버전'], beta: ['Beta', '필드·동작이 바뀔 수 있음'], alpha: ['Alpha', '예고 없이 변경·삭제될 수 있음'] };
-  App.TIER = { 1: '메이저 릴리스 동안 최소 12개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정', 2: '메이저 릴리스 동안 최소 9개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정', 3: '마이너 릴리스 내 최소 6개월 또는 1개 마이너 릴리스(둘 중 긴 쪽) 안정', 4: '호환성 보장 없음. 언제든 변경될 수 있어 장기 지원이 필요한 곳에는 쓰지 않는 것이 좋음' };
+  App.STAB = { ga: ['GA', ui('안정 버전')], beta: ['Beta', ui('필드·동작이 바뀔 수 있음')], alpha: ['Alpha', ui('예고 없이 변경·삭제될 수 있음')] };
+  App.TIER = { 1: ui('메이저 릴리스 동안 최소 12개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정'), 2: ui('메이저 릴리스 동안 최소 9개월 또는 3개 마이너 릴리스(둘 중 긴 쪽) 안정'), 3: ui('마이너 릴리스 내 최소 6개월 또는 1개 마이너 릴리스(둘 중 긴 쪽) 안정'), 4: ui('호환성 보장 없음. 언제든 변경될 수 있어 장기 지원이 필요한 곳에는 쓰지 않는 것이 좋음') };
   /* 버전 가용성 문장: 전 버전 제공이면 null */
   App.availText = m => {
     const L = VL.slice().reverse(), has = L.map(v => m.vers.includes(v));
     if (has.every(Boolean)) return null;
     const a = has.indexOf(true), z = has.lastIndexOf(true), first = L[a], last = L[z], latest = L[L.length - 1];
     if (has.slice(a, z + 1).every(Boolean)) {
-      if (a === z) return `${first}에서만 제공`;
-      if (last === latest) return `${first}부터 제공`;
-      if (first === L[0]) return `${last}까지 제공 (이후 제거)`;
-      return `${first}–${last}에서만 제공`;
+      if (a === z) return ui`${first}에서만 제공`;
+      if (last === latest) return ui`${first}부터 제공`;
+      if (first === L[0]) return ui`${last}까지 제공 (이후 제거)`;
+      return ui`${first}–${last}에서만 제공`;
     }
-    return m.vers.slice().reverse().join('·') + '에서만 제공';
+    return ui`${m.vers.slice().reverse().join('·')}에서만 제공`;
   };
-  App.pills = m => `<span class="vpills"><span class="version-label">제공 버전</span>${VL.slice().reverse().map(v => `<span class="vp${m.vers.includes(v) ? '' : ' off'}" title="${v}${m.vers.includes(v) ? ' 제공 · ' + m.gv[v] : ' 에는 없음'}">${v}</span>`).join('')}</span>`;
+  App.pills = m => ui`<span class="vpills"><span class="version-label">제공 버전</span>${VL.slice().reverse().map(v => `<span class="vp${m.vers.includes(v) ? '' : ' off'}" title="${v}${m.vers.includes(v) ? ui(' 제공 · ') + m.gv[v] : ui(' 에는 없음')}">${v}</span>`).join('')}</span>`;
   App.consChips = (m, max) => {
     const f = m.constraintTotals || m.flags || {}, out = [], at = App.availText(m);
     if (at) out.push(`<span class="cons ver">${App.ic('layers', 12)} ${esc(at)}</span>`);
-    if (f.dep) out.push(`<span class="cons dep" title="설명에 폐지·제거 예정 표시가 있는 항목">${App.ic('alert', 12)} 폐지 예정 ${f.dep}</span>`);
-    if (f.prev) out.push(`<span class="cons prev" title="Technology Preview·알파/베타 수준·기능 게이트가 언급된 항목">${App.ic('flask', 12)} 미리보기 ${f.prev}</span>`);
-    if (f.imm) out.push(`<span class="cons imm" title="생성 후 변경할 수 없는 필드·값">${App.ic('lock', 12)} 변경 불가 ${f.imm}</span>`);
-    if (f.single) out.push(`<span class="cons misc">${App.ic('hash', 12)} 이름 제약</span>`);
-    if (f.excl) out.push(`<span class="cons misc">상호 배타 ${f.excl}</span>`);
+    if (f.dep) out.push(ui`<span class="cons dep" title="설명에 폐지·제거 예정 표시가 있는 항목">${App.ic('alert', 12)} 폐지 예정 ${f.dep}</span>`);
+    if (f.prev) out.push(ui`<span class="cons prev" title="Technology Preview·알파/베타 수준·기능 게이트가 언급된 항목">${App.ic('flask', 12)} 미리보기 ${f.prev}</span>`);
+    if (f.imm) out.push(ui`<span class="cons imm" title="생성 후 변경할 수 없는 필드·값">${App.ic('lock', 12)} 변경 불가 ${f.imm}</span>`);
+    if (f.single) out.push(ui`<span class="cons misc">${App.ic('hash', 12)} 이름 제약</span>`);
+    if (f.excl) out.push(ui`<span class="cons misc">상호 배타 ${f.excl}</span>`);
     return (max ? out.slice(0, max) : out).join('');
   };
 
@@ -172,9 +233,9 @@
   App.theme = LS.get('theme', 'system');
   App.applyTheme = () => {
     const r = document.documentElement; if (App.theme === 'system') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', App.theme);
-    const b = $('#themebtn'); if (b) { b.innerHTML = App.ic(App.theme === 'dark' ? 'moon' : App.theme === 'light' ? 'sun' : 'monitor', 18); b.title = '테마: ' + ({ system: '시스템', light: '라이트', dark: '다크' })[App.theme] + ' (클릭하여 변경)'; b.setAttribute('aria-label', b.title); }
+    const b = $('#themebtn'); if (b) { b.innerHTML = App.ic(App.theme === 'dark' ? 'moon' : App.theme === 'light' ? 'sun' : 'monitor', 18); b.title = ui('테마: ') + ({ system: ui('시스템'), light: ui('라이트'), dark: ui('다크') })[App.theme] + ui(' (클릭하여 변경)'); b.setAttribute('aria-label', b.title); }
   };
-  App.cycleTheme = () => { App.theme = THEMES[(THEMES.indexOf(App.theme) + 1) % 3]; LS.set('theme', App.theme); App.applyTheme(); App.toast('테마: ' + ({ system: '시스템', light: '라이트', dark: '다크' })[App.theme], 'sun'); window.dispatchEvent(new Event('themechange')); };
+  App.cycleTheme = () => { App.theme = THEMES[(THEMES.indexOf(App.theme) + 1) % 3]; LS.set('theme', App.theme); App.applyTheme(); App.toast(ui('테마: ') + ({ system: ui('시스템'), light: ui('라이트'), dark: ui('다크') })[App.theme], 'sun'); window.dispatchEvent(new Event('themechange')); };
 
   /* ---------- 라우터 ---------- */
   App.dec = s => { try { return decodeURIComponent(s); } catch (e) { return s; } };
@@ -185,20 +246,26 @@
   };
   App.href = h => '#' + App.ver + '/' + (h || '');
   App.nav = h => { location.hash = App.href(h); };
-  App.setVer = v => { if (!VL.includes(v)) return; const changed = v !== App.ver; App.ver = v; LS.set('ver', v); $('#ver').value = v; if (changed && App.sideReady) renderSide(); };
+  App.setVer = v => { if (!VL.includes(v)) return; const changed = v !== App.ver; App.ver = v; LS.set('ver', v); $('#ver').value = v; if (changed) renderSide(); };
   let seq = 0, first = true;
   App.activeSeq = 0;
   const focusMain = () => { const h = $('#main h1, #main h2'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); } };
-  const showError = (title, detail) => {
-    $('#main').innerHTML = `<div class="page"><div class="empty"><h1 style="font-size:18px">${esc(title)}</h1><p class="hint">${esc(detail || '잠시 후 다시 시도해 주세요.')}</p><button class="btn ghost" id="retry">다시 시도</button></div></div>`;
-    $('#retry').addEventListener('click', () => { App.ready = App.boot().then(() => renderSide()); go(); });
+  const startCatalog = () => {
+    App.ready = App.boot().then(() => {
+      renderSide();
+      App.refreshOpenPalette();
+    });
+  };
+  const showError = (title, detail, retry = go) => {
+    $('#main').innerHTML = ui`<div class="page"><div class="empty"><h1 style="font-size:18px">${esc(title)}</h1><p class="hint">${esc(detail || ui('잠시 후 다시 시도해 주세요.'))}</p><button class="btn ghost" id="retry">다시 시도</button></div></div>`;
+    $('#retry').addEventListener('click', e => { e.currentTarget.disabled = true; retry(); });
   };
   App.showError = showError;
   async function go() {
     const my = ++seq; App.activeSeq = my; const p = App.parseHash();
-    if (p.v && !VL.includes(p.v)) { App.toast(`지원하지 않는 버전(${p.v})이라 ${App.ver}로 열었습니다`, 'info'); history.replaceState(null, '', '#' + App.ver + '/' + p.h); }
+    if (p.v && !VL.includes(p.v)) { App.toast(ui`지원하지 않는 버전(${p.v})이라 ${App.ver}로 열었습니다`, 'info'); history.replaceState(null, '', '#' + App.ver + '/' + p.h); }
     else if (p.v && p.v !== App.ver) App.setVer(p.v);
-    try { await App.ready; } catch (e) { return fatal(e); }
+    try { await App.ready; } catch (e) { if (my === seq) fatal(e); return; }
     if (my !== seq) return;
     if (App.cleanup) { try { App.cleanup(); } catch (e) { /* 정리 실패 무시 */ } App.cleanup = null; }
     const known = p.name !== '' && Object.prototype.hasOwnProperty.call(App.views, p.name);
@@ -210,17 +277,21 @@
       if (typeof c === 'function') App.cleanup = c;
       if (!first && !$('#main').contains(document.activeElement)) focusMain();
       first = false;
-    } catch (e) { console.error(e); if (my === seq) showError('화면을 불러오지 못했습니다'); }
+    } catch (e) { console.error(e); if (my === seq) showError(ui('화면을 불러오지 못했습니다')); }
     finally { bar.done(); }
   }
   App.go = go;
-  const fatal = e => { console.error(e); showError('데이터를 불러오지 못했습니다', '연결 상태를 확인하고 다시 시도해 주세요. 카탈로그가 갱신됐다면 페이지를 새로고침해 주세요.'); };
+  const fatal = e => {
+    console.error(e);
+    showError(ui('데이터를 불러오지 못했습니다'), ui('연결 상태를 확인하고 다시 시도해 주세요. 카탈로그가 갱신됐다면 페이지를 새로고침해 주세요.'), () => { startCatalog(); go(); });
+    if (!$('#palette').hidden) { App.closePalette(); $('#retry').focus(); }
+  };
   App.render = (html, wide) => { const m = $('#main'); m.innerHTML = `<div class="page${wide ? ' wide' : ''}">${html}</div>`; window.scrollTo(0, 0); return m.firstElementChild; };
   App.NAME = 'API Book';   // 제품 이름(상표가 들어가지 않는 중립적인 이름)
   App.title = t => { document.title = (t ? t + ' · ' : '') + App.NAME; };
 
   /* ---------- 사이드바 ---------- */
-  const NAV = [['home', '홈', 'home', ''], ['browse', 'API 탐색', 'book', 'browse'], ['topology', '토폴로지', 'topology', 'topology'], ['sim', '시뮬레이터', 'flask', 'sim'], ['compare', '버전 비교', 'compare', 'compare'], ['guide', '가이드', 'file-text', 'guide']];
+  const NAV = [['home', ui('홈'), 'home', ''], ['browse', ui('API 탐색'), 'book', 'browse'], ['topology', ui('토폴로지'), 'topology', 'topology'], ['sim', ui('시뮬레이터'), 'flask', 'sim'], ['compare', ui('버전 비교'), 'compare', 'compare'], ['guide', ui('가이드'), 'file-text', 'guide']];
   function markNav(name) {
     const map = { home: 'home', browse: 'browse', api: 'browse', topology: 'topology', sim: 'sim', compare: 'compare', guide: 'guide' };
     App.$$('.navitem[data-nav]').forEach(e => { if (e.dataset.nav === map[name]) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current'); });
@@ -233,15 +304,21 @@
     if (fk) { const el = $('#side ' + fk); if (el) el.focus(); }
   }
   function renderSideInner() {
-    const s = $('#side'); if (!s || !U.byKey) return;
+    const s = $('#side'); if (!s) return;
+    const nav = ui`<nav aria-label="주 메뉴"><ul class="navlist">${NAV.map(([id, label, icon, h]) => `<li><a class="navitem" data-nav="${id}" href="${App.href(h)}">${App.ic(icon, 17)}<span>${label}</span></a></li>`).join('')}</ul></nav>`;
+    if (!U.byKey) {
+      s.innerHTML = nav;
+      markNav(App.parseHash().name || 'home');
+      return;
+    }
     const fav = App.fav.list().filter(k => U.byKey.has(k)), rec = App.recent.list().filter(k => U.byKey.has(k) && !fav.includes(k)).slice(0, 6);
     const item = k => { const a = U.byKey.get(k); return `<li><a class="sideitem" data-key="${esc(k)}" href="${App.hrefFor(a)}"><span class="k">${esc(a.kind)}</span><span class="n">${esc(a.m.gv[App.pickVer(a.m, App.ver)])}</span></a></li>`; };
-    const cats = Object.entries(U.cats).sort((x, y) => (ApiSearch.CAT_KO[x[0]] || x[0]).localeCompare(ApiSearch.CAT_KO[y[0]] || y[0], 'ko'));
-    s.innerHTML = `<nav aria-label="주 메뉴"><ul class="navlist">${NAV.map(([id, label, icon, h]) => `<li><a class="navitem" data-nav="${id}" href="${App.href(h)}">${App.ic(icon, 17)}<span>${label}</span></a></li>`).join('')}</ul></nav>
-      ${fav.length ? `<div class="sidehead">즐겨찾기</div><ul class="sidelist">${fav.map(item).join('')}</ul>` : ''}
-      ${rec.length ? `<div class="sidehead">최근 본 API</div><ul class="sidelist">${rec.map(item).join('')}</ul>` : ''}
-      <div class="sidehead">분류</div><ul class="sidelist">${cats.map(([b, n]) => `<li><a class="sideitem" href="${App.href('browse:cat=' + b)}"><span class="k" style="font-family:var(--sans)">${esc(ApiSearch.CAT_KO[b] || b)}</span><span class="n">${n}</span></a></li>`).join('')}</ul>
-      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString('ko-KR')}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="#" id="aboutlink">${App.ic('info', 13)} 정보 · 고지 · 저장 설정</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소 · Apache-2.0</a></div>`;
+    const cats = Object.entries(U.cats).sort((x, y) => (App.categories[x[0]] || x[0]).localeCompare(App.categories[y[0]] || y[0], App.locale));
+    s.innerHTML = nav + ui`
+      ${fav.length ? ui`<div class="sidehead">즐겨찾기</div><ul class="sidelist">${fav.map(item).join('')}</ul>` : ''}
+      ${rec.length ? ui`<div class="sidehead">최근 본 API</div><ul class="sidelist">${rec.map(item).join('')}</ul>` : ''}
+      <div class="sidehead">분류</div><ul class="sidelist">${cats.map(([b, n]) => `<li><a class="sideitem" href="${App.href('browse:cat=' + b)}"><span class="k" style="font-family:var(--sans)">${esc(App.categories[b] || b)}</span><span class="n">${n}</span></a></li>`).join('')}</ul>
+      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString(App.locale)}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="#" id="aboutlink">${App.ic('info', 13)} 정보 · 고지 · 저장 설정</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소 · Apache-2.0</a></div>`;
     markNav(App.cur);
   }
   App.renderSide = renderSide;
@@ -260,11 +337,17 @@
     $('#ver').addEventListener('change', e => { const { h } = App.parseHash(); App.setVer(e.target.value); const nh = '#' + App.ver + '/' + h; if (location.hash !== nh) location.hash = nh; else go(); });
     $('#menubtn').addEventListener('click', () => (document.body.classList.contains('nav-open') ? App.closeDrawer() : App.openDrawer()));
     $('#scrim').addEventListener('click', () => App.closeDrawer());
+    $('#side').addEventListener('click', e => {
+      if (!document.body.classList.contains('nav-open') || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      const link = e.target.closest('a.navitem, a.sideitem');
+      if (link) App.closeDrawer(link.hash !== location.hash);
+    });
     mq.addEventListener('change', App.syncDrawer); App.syncDrawer();
     $('#helpbtn').addEventListener('click', () => App.showHelp && App.showHelp());
     document.addEventListener('click', e => { if (e.target.closest('#helplink')) { e.preventDefault(); App.showHelp && App.showHelp(); } else if (e.target.closest('#aboutlink')) { e.preventDefault(); App.showAbout && App.showAbout(); } });
     window.addEventListener('hashchange', go);
-    App.ready = App.boot().then(() => { App.sideReady = true; renderSide(); });
+    renderSide();
+    startCatalog();
     if (!location.hash) history.replaceState(null, '', '#' + App.ver + '/');
     go();
     App.ready.then(() => (window.requestIdleCallback || (f => setTimeout(f, 1200)))(() => { App.lazy('graph.js', 'viz.js', 'topo.js', 'sim.js').catch(() => {}); })).catch(() => {});

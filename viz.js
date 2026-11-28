@@ -41,7 +41,7 @@
     setData(nodes, edges, opt) {
       opt = opt || {};
       this.nodes = nodes; this.map = new Map(nodes.map(n => [n.id, n]));
-      this.edges = edges.map(e => Object.assign({}, e, { a: this.map.get(e.s), b: this.map.get(e.t) })).filter(e => e.a && e.b);
+      this.edges = edges.map(e => Object.assign({}, e, { sourceEdge: e, a: this.map.get(e.s), b: this.map.get(e.t) })).filter(e => e.a && e.b);
       this.nb = new Map(nodes.map(n => [n.id, new Set()]));
       this.edges.forEach(e => { this.nb.get(e.s).add(e.t); this.nb.get(e.t).add(e.s); });
       nodes.forEach((n, i) => { if (n.x === undefined) { const a = i * 2.399, r = 30 + 14 * Math.sqrt(i); n.x = Math.cos(a) * r; n.y = Math.sin(a) * r; } n.vx = n.vy = 0; });
@@ -146,15 +146,15 @@
       const ctx = this.ctx, v = this.view, { dark, ink, sub, line, accent, bg, panel } = this.colors();
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.clearRect(0, 0, this.w, this.h);
       ctx.translate(v.x, v.y); ctx.scale(v.k, v.k);
-      const focus = this.sel || this.hover, fset = focus ? new Set([focus, ...(this.nb.get(focus) || [])]) : null;
+      const focus = this.pathEdges ? null : this.sel || this.hover, fset = focus ? new Set([focus, ...(this.nb.get(focus) || [])]) : null;
       const bright = id => (!this.keep || this.keep.has(id)) && (!fset || fset.has(id));
       const nodes = this.o.spatial ? this.nodes.map(n => this.project(n)).sort((a, b) => a.depth - b.depth) : this.nodes;
       const projected = this.o.spatial ? new Map(nodes.map(n => [n.id, n])) : this.map;
       // 간선
       for (const e of this.edges) {
-        const s = STYLE[e.type] || STYLE.mention, inc = focus && (e.s === focus || e.t === focus);
+        const s = STYLE[e.type] || STYLE.mention, inc = this.pathEdges ? this.pathEdges.has(e.sourceEdge) : focus && (e.s === focus || e.t === focus);
         const keepE = !this.keep || (this.keep.has(e.s) && this.keep.has(e.t));
-        const alpha = !keepE ? 0.05 : focus ? (inc ? 0.95 : (this.o.dimEdge === undefined ? 0.07 : this.o.dimEdge)) : 0.5;
+        const alpha = this.pathEdges ? (inc ? 1 : 0.045) : !keepE ? 0.05 : focus ? (inc ? 0.95 : (this.o.dimEdge === undefined ? 0.07 : this.o.dimEdge)) : 0.5;
         ctx.globalAlpha = alpha; ctx.strokeStyle = inc ? accent : sub; ctx.lineWidth = (inc ? s.w + 0.8 : s.w) / Math.sqrt(v.k);
         ctx.setLineDash(s.dash.map(x => x / Math.sqrt(v.k)));
         const a = projected.get(e.s), b = projected.get(e.t);
@@ -190,7 +190,7 @@
       ctx.font = `600 ${fs}px "JetBrains Mono",Consolas,monospace`;
       const labelDegree = this.o.spatial && this.w < 480 && v.k < 0.6 ? 18 : 9;
       for (const n of nodes) {
-        const lab = this.o.labels === 'all' || n.id === this.sel || n.id === this.hover || (fset && fset.has(n.id) && (n.id === focus || v.k > 0.7)) || (this.o.labels === 'auto' && (n.deg >= labelDegree || v.k > 1.7));
+        const lab = (this.pathEdges && this.keep?.has(n.id)) || this.o.labels === 'all' || n.id === this.sel || n.id === this.hover || (fset && fset.has(n.id) && (n.id === focus || v.k > 0.7)) || (this.o.labels === 'auto' && (n.deg >= labelDegree || v.k > 1.7));
         if (!lab || (this.keep && !this.keep.has(n.id) && n.id !== this.sel)) continue;
         if (!bright(n.id) && !(this.o.labels === 'all')) continue;
         ctx.lineWidth = 4 / Math.sqrt(v.k); ctx.strokeStyle = bg; ctx.strokeText(n.label, n.x, n.y + n.r + 3); ctx.fillStyle = ink; ctx.fillText(n.label, n.x, n.y + n.r + 3);

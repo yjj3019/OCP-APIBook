@@ -2,56 +2,57 @@
 /* 커맨드 팔레트(Ctrl/⌘+K, /), 단축키, 도움말 */
 (function () {
   'use strict';
+  const ui = window.ApiBookLocale.text;
   const App = window.App, $ = App.$, esc = App.esc, ic = App.ic, U = App.U, VL = App.VL;
   let open = false, sel = 0, items = [], prevFocus = null, gTimer = 0, gPending = false;
   const box = () => $('#palette');
 
   const commands = () => [
-    { t: '홈', k: 'home 홈 메인 대시보드', i: 'home', run: () => App.nav('') },
-    { t: 'API 탐색', k: 'browse 탐색 목록 필터 검색', i: 'book', run: () => App.nav('browse') },
-    { t: '토폴로지', k: 'topology 관계 그래프 연결', i: 'topology', run: () => App.nav('topology') },
-    { t: 'API 설계 시뮬레이터', k: 'simulator sim 시뮬레이터 설계 검증 yaml', i: 'flask', run: () => App.nav('sim') },
-    { t: '버전 비교', k: 'compare diff 비교 변경 버전', i: 'compare', run: () => App.nav('compare') },
-    { t: '가이드', k: 'guide 가이드 호환성 정책 tier', i: 'file-text', run: () => App.nav('guide') },
-    { t: '테마 바꾸기 (시스템/라이트/다크)', k: 'theme dark light 다크 라이트 테마', i: 'sun', run: () => App.cycleTheme() },
-    ...VL.map(v => ({ t: `문서 버전을 ${v}로 전환`, k: `version 버전 ${v}`, i: 'layers', run: () => { const { h } = App.parseHash(); App.setVer(v); const nh = '#' + v + '/' + h; if (location.hash !== nh) location.hash = nh; else App.go(); } })),
-    { t: '단축키 보기', k: 'help shortcut 단축키 도움말', i: 'keyboard', run: () => App.showHelp() },
+    { t: ui('홈'), k: ui('home 홈 메인 대시보드'), i: 'home', run: () => App.nav('') },
+    { t: ui('API 탐색'), k: ui('browse 탐색 목록 필터 검색'), i: 'book', run: () => App.nav('browse') },
+    { t: ui('토폴로지'), k: ui('topology 관계 그래프 연결'), i: 'topology', run: () => App.nav('topology') },
+    { t: ui('API 설계 시뮬레이터'), k: ui('simulator sim 시뮬레이터 설계 검증 yaml'), i: 'flask', run: () => App.nav('sim') },
+    { t: ui('버전 비교'), k: ui('compare diff 비교 변경 버전'), i: 'compare', run: () => App.nav('compare') },
+    { t: ui('가이드'), k: ui('guide 가이드 호환성 정책 tier'), i: 'file-text', run: () => App.nav('guide') },
+    { t: ui('테마 바꾸기 (시스템/라이트/다크)'), k: ui('theme dark light 다크 라이트 테마'), i: 'sun', run: () => App.cycleTheme() },
+    ...VL.map(v => ({ t: ui`문서 버전을 ${v}로 전환`, k: ui`version 버전 ${v}`, i: 'layers', run: () => { const { h } = App.parseHash(); App.setVer(v); const nh = '#' + v + '/' + h; if (location.hash !== nh) location.hash = nh; else App.go(); } })),
+    { t: ui('단축키 보기'), k: ui('help shortcut 단축키 도움말'), i: 'keyboard', run: () => App.showHelp() },
   ];
 
   function build(q) {
     const out = [], E = U.E; q = q.trim();
     if (!q) {
       const favs = App.fav.list().filter(k => U.byKey.has(k)), recs = App.recent.list().filter(k => U.byKey.has(k) && !favs.includes(k)).slice(0, 5);
-      if (favs.length) out.push({ g: '즐겨찾기' }, ...favs.slice(0, 5).map(k => ({ type: 'api', a: U.byKey.get(k) })));
-      if (recs.length) out.push({ g: '최근 본 API' }, ...recs.map(k => ({ type: 'api', a: U.byKey.get(k) })));
-      out.push({ g: '바로가기' }, ...commands().slice(0, 8).map(c => ({ type: 'cmd', c })));
+      if (favs.length) out.push({ g: ui('즐겨찾기') }, ...favs.slice(0, 5).map(k => ({ type: 'api', a: U.byKey.get(k) })));
+      if (recs.length) out.push({ g: ui('최근 본 API') }, ...recs.map(k => ({ type: 'api', a: U.byKey.get(k) })));
+      out.push({ g: ui('바로가기') }, ...commands().slice(0, 8).map(c => ({ type: 'cmd', c })));
       return { out, P: null, H: s => s };
     }
     const r = E.search(q), P = r.P, H = E.highlighter(P), apis = r.apis.slice(0, 7);
     if (apis.length) out.push({ g: 'API' }, ...apis.map(x => ({ type: 'api', a: x.d.a, d: x.d, P, fieldVersions: x.fieldVersions })));
     const fields = [];
     for (const x of r.apis.slice(0, 30)) { const s = E.snippet(x.d, P); if (s.src === '필드 경로' && fields.length < 4) fields.push({ type: 'field', a: x.d.a, text: s.text, fieldVersions: x.fieldVersions }); }
-    if (fields.length) out.push({ g: '필드' }, ...fields);
-    if (r.guide.length) out.push({ g: '가이드' }, ...r.guide.slice(0, 3).map(x => ({ type: 'guide', g2: x.g })));
+    if (fields.length) out.push({ g: ui('필드') }, ...fields);
+    if (r.guide.length) out.push({ g: ui('가이드') }, ...r.guide.slice(0, 3).map(x => ({ type: 'guide', g2: x.g })));
     const ql = q.toLowerCase(), cmds = commands().filter(c => (c.t + ' ' + c.k).toLowerCase().includes(ql)).slice(0, 4);
-    if (cmds.length) out.push({ g: '이동 · 동작' }, ...cmds.map(c => ({ type: 'cmd', c })));
+    if (cmds.length) out.push({ g: ui('이동 · 동작') }, ...cmds.map(c => ({ type: 'cmd', c })));
     if (!out.length) out.push({ empty: true });
     return { out, P, H };
   }
   function itemHTML(it, i, H) {
     if (it.g) return `<div class="palgrp">${it.g}</div>`;
-    if (it.empty) return `<div class="empty" style="padding:28px 12px"><b>결과가 없습니다.</b><p class="hint">다른 단어로 검색해 보세요.</p></div>`;
+    if (it.empty) return ui`<div class="empty" style="padding:28px 12px"><b>결과가 없습니다.</b><p class="hint">다른 단어로 검색해 보세요.</p></div>`;
     const sl = `role="option" id="pal-i${i}" data-i="${i}" aria-selected="${i === sel}"`;
     if (it.type === 'cmd') return `<button class="palit" ${sl}><span class="pi">${ic(it.c.i, 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${esc(it.c.t)}</b></span></button>`;
-    if (it.type === 'guide') return `<button class="palit" ${sl}><span class="pi">${ic('file-text', 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${App.hlz(it.g2.title, H)}</b><small>가이드</small></span></button>`;
+    if (it.type === 'guide') return ui`<button class="palit" ${sl}><span class="pi">${ic('file-text', 15)}</span><span class="pt"><b style="font-family:var(--sans);font-weight:500">${App.hlz(it.g2.title, H)}</b><small>가이드</small></span></button>`;
     const v = App.fieldRelease(it.fieldVersions), a = it.a, gv = (a.group ? a.group + '/' : '') + a.m.gv[App.pickVer(a.m, v || App.ver)];
-    if (it.type === 'field') return `<button class="palit" ${sl}><span class="pi">${ic('list', 15)}</span><span class="pt"><b>${esc(a.kind)}</b><small>${App.hlz(it.text, H)}</small></span><span class="pr"><span class="badge mono">필드 ${it.fieldVersions?.join(" · ") || ""}</span></span></button>`;
-    const at = it.fieldVersions ? "필드 · " + it.fieldVersions.join(" · ") : App.availText(a.m), s = it.d && it.P ? U.E.snippet(it.d, it.P) : { text: App.firstSent(a.d && a.d.desc) };
+    if (it.type === 'field') return ui`<button class="palit" ${sl}><span class="pi">${ic('list', 15)}</span><span class="pt"><b>${esc(a.kind)}</b><small>${App.hlz(it.text, H)}</small></span><span class="pr"><span class="badge mono">필드 ${it.fieldVersions?.join(" · ") || ""}</span></span></button>`;
+    const at = it.fieldVersions ? ui("필드 · ") + it.fieldVersions.join(" · ") : App.availText(a.m), s = it.d && it.P ? U.E.snippet(it.d, it.P) : { text: App.firstSent(a.d && a.d.desc) };
     return `<button class="palit" ${sl}><span class="pi">${ic('box', 15)}</span><span class="pt"><b>${App.hlz(a.kind, H)}</b> <span class="gv">${esc(gv)}</span><small>${App.hlz(App.short(s.text, 110), H)}</small></span><span class="pr">${at ? `<span class="cons ver">${esc(at)}</span>` : ''}<span class="badge ${App.stab(a.m.gv[App.pickVer(a.m, v || App.ver)])}">${App.STAB[App.stab(a.m.gv[App.pickVer(a.m, v || App.ver)])][0]}</span></span></button>`;
   }
   let H = s => s;
   function render() {
-    if (!U.E) { $('#palres').innerHTML = '<div class="empty" style="padding:28px 12px"><b>검색 데이터를 불러오는 중입니다…</b></div>'; return; }
+    if (!U.E) { $('#palres').innerHTML = ui('<div class="empty" style="padding:28px 12px"><b>검색 데이터를 불러오는 중입니다…</b></div>'); return; }
     const q = $('#palin').value, r = build(q); H = r.H; items = r.out;
     sel = Math.min(sel, Math.max(0, items.length - 1)); while (items[sel] && !items[sel].type && sel < items.length - 1) sel++;
     $('#palres').innerHTML = items.map((it, i) => itemHTML(it, i, H)).join('');
@@ -74,10 +75,12 @@
     location.hash = App.hrefFor(a, want);
   }
   App.openPalette = (initial) => {
+    const retry = $('#retry');
+    if (!U.E && retry && !retry.disabled) { retry.focus(); return; }
     if (open) return; open = true; prevFocus = document.activeElement; const b = box(); b.hidden = false;
     const inp = $('#palin'); inp.value = initial || ''; sel = 0; render(); setTimeout(() => inp.focus(), 0);
-    if (!U.E) App.ready.then(() => { if (open) render(); }).catch(() => {});
   };
+  App.refreshOpenPalette = () => { if (open) render(); };
   function close() { if (!open) return; open = false; box().hidden = true; if (prevFocus && prevFocus.focus) try { prevFocus.focus(); } catch (e) { /* 무시 */ } }
   App.closePalette = close;
 
@@ -87,7 +90,7 @@
     const h = $('#help'); if (!h.hidden) { closeHelp(); return; }
     helpPrev = document.activeElement;
     const K = (...k) => k.map(x => `<kbd>${x}</kbd>`).join('');
-    h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="단축키"><div style="display:flex;align-items:center"><h3 style="margin:0">단축키</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
+    h.innerHTML = ui`<div class="helpbox" role="dialog" aria-modal="true" aria-label="단축키"><div style="display:flex;align-items:center"><h3 style="margin:0">단축키</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
       <dl class="keys" style="margin-top:14px"><dt>${K('Ctrl', 'K')} ${K('/')}</dt><dd>검색 팔레트 열기</dd>
       <dt>${K('↑')} ${K('↓')} ${K('Enter')}</dt><dd>결과 이동 · 열기</dd>
       <dt>${K('Ctrl', 'Enter')}</dt><dd>팔레트에서 시뮬레이터로 열기</dd>
@@ -95,13 +98,13 @@
       <dt>${K('g')} ${K('s')}</dt><dd>시뮬레이터</dd><dt>${K('g')} ${K('c')}</dt><dd>버전 비교</dd><dt>${K('g')} ${K('g')}</dt><dd>가이드</dd>
       <dt>${K('f')}</dt><dd>API 상세에서 즐겨찾기 토글</dd><dt>${K('s')}</dt><dd>API 상세에서 시뮬레이터로 설계</dd>
       <dt>${K('?')}</dt><dd>이 도움말</dd><dt>${K('Esc')}</dt><dd>닫기</dd></dl>
-      <p class="note" style="margin-top:16px">${ic('zap', 13)} 색인 ${U.E ? U.E.stats.tokens.toLocaleString('ko-KR') : '-'}단어 · 생성 ${U.E ? Math.round(U.E.stats.buildMs) : '-'}ms · 데이터 로딩 ${Math.round(App.bootMs || 0)}ms</p></div>`;
+      <p class="note" style="margin-top:16px">${ic('zap', 13)} 색인 ${U.E ? U.E.stats.tokens.toLocaleString(App.locale) : '-'}단어 · 생성 ${U.E ? Math.round(U.E.stats.buildMs) : '-'}ms · 데이터 로딩 ${Math.round(App.bootMs || 0)}ms</p></div>`;
     h.hidden = false; $('#helpx').focus();
     h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) closeHelp(); };
     h.onkeydown = e => { if (e.key === 'Tab') { e.preventDefault(); $('#helpx').focus(); } };
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function bindPalette() {
     const inp = $('#palin');
     inp.addEventListener('input', () => { sel = 0; render(); });
     inp.addEventListener('keydown', e => {
@@ -114,7 +117,9 @@
     $('#palres').addEventListener('click', e => { const b = e.target.closest('.palit'); if (b) run(+b.dataset.i, e.ctrlKey || e.metaKey); });
     $('#palette').addEventListener('mousedown', e => { if (e.target === $('#palette')) close(); });
     $('#searchbtn').addEventListener('click', () => App.openPalette());
-  });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindPalette, { once: true });
+  else bindPalette();
   const typing = el => el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); open ? close() : App.openPalette(); return; }
@@ -137,21 +142,26 @@
   App.showAbout = () => {
     const h = $('#help'); if (!h.hidden) closeHelp();
     helpPrev = document.activeElement;
-    h.innerHTML = `<div class="helpbox" role="dialog" aria-modal="true" aria-label="정보와 고지"><div style="display:flex;align-items:center"><h3 style="margin:0">정보 · 고지</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
+    h.innerHTML = ui`<div class="helpbox" role="dialog" aria-modal="true" aria-label="정보와 고지"><div style="display:flex;align-items:center"><h3 style="margin:0">정보 · 고지</h3><button class="iconbtn" style="margin-left:auto" id="helpx" aria-label="닫기">${ic('x', 18)}</button></div>
       <p style="margin-top:14px"><b>${App.NAME}</b>은 <b>비공식</b> 프로젝트입니다. 원문 문서의 저작자·상표권자와 제휴·후원·보증 관계가 없습니다.</p>
       <p>API 설명·필드·엔드포인트는 Apache License 2.0으로 공개된 버전별 API 문서에서 수집해 변형했습니다. 원문 라이선스 조건에 따라 설명 문장 속 상표 이름은 중립적인 표현으로 바꿨고, API 그룹·종류 이름(예: <code>route.openshift.io</code>)은 상호운용을 위한 식별자라 그대로 둡니다. 출처, 원문 고지, 변경 사항은 NOTICE에 있습니다.</p>
       <p>"제약·제한 사항"은 원문 설명에서 자동 추출한 것이라 정확하지 않을 수 있습니다. 중요한 판단은 원문을 확인하세요. "일반 관계"(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.</p>
       <p>글꼴은 사용자 기기의 시스템 글꼴을 씁니다(웹 글꼴을 포함하지 않음).</p>
       <p class="note"><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener noreferrer">저장소 · LICENSE · NOTICE ${ic('external', 12)}</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>
       <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
-      <p style="margin:0 0 8px"><b>저장된 설정</b>: 즐겨찾기, 최근 본 API, 테마, 기준 버전, 시뮬레이터 초안이 이 브라우저에만 저장됩니다(서버로 전송되지 않음).</p>
-      <button class="btn ghost" id="clrstore">${ic('trash', 14)} 저장된 설정 모두 지우기</button></div>`;
+      <p style="margin:0 0 8px">즐겨찾기, 최근 본 API, 테마, 기준 버전은 이 브라우저에 저장됩니다. 초안은 시뮬레이터의 ‘모든 버전의 저장본 지우기’에서 삭제할 수 있습니다.</p>
+      <button class="btn ghost" id="clrstore">${ic('trash', 14)} 화면 설정과 탐색 기록 지우기</button></div>`;
     h.hidden = false; $('#helpx').focus();
     h.onclick = e => { if (e.target === h || e.target.closest('#helpx')) closeHelp(); };
     h.onkeydown = e => { if (e.key !== 'Tab') return; e.preventDefault(); const f = App.$$('#help a[href], #help button:not([disabled])'); if (!f.length) return; const i = f.indexOf(document.activeElement); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); };
     $('#clrstore').addEventListener('click', () => {
-      try { Object.keys(localStorage).filter(k => k.startsWith('apibook')).forEach(k => localStorage.removeItem(k)); } catch (e) { /* 저장소 접근 불가 */ }
-      App.theme = 'system'; App.applyTheme(); App.renderSide(); App.toast('저장된 설정을 지웠습니다', 'check');
+      try {
+        for (const key of ['fav', 'recent', 'theme', 'ver']) localStorage.removeItem('apibook2.' + key);
+      } catch {
+        App.toast(ui('설정을 모두 지우지 못했습니다. 브라우저 저장소를 확인해 주세요.'), 'alert');
+        return;
+      }
+      App.theme = 'system'; App.applyTheme(); App.refreshPersonalViews(); App.toast(ui('저장된 설정을 지웠습니다'), 'check');
     });
   };
 })();
