@@ -2,11 +2,11 @@
 /* API Book MCP 서버 (stdio, 의존성 없음)
  *   node mcp/server.js
  * data/ 의 API 레퍼런스를 MCP 도구로 노출한다. 읽기 전용이며 네트워크·클러스터에 접근하지 않는다.
- * 도구: search_apis, get_api, get_fields, get_constraints, compare_versions, list_apis, generate_manifest
+ * 도구: search_apis, get_api, get_fields, get_constraints, compare_versions, list_apis, generate_manifest, validate_manifest, get_catalog_status
  * 프로토콜: JSON-RPC 2.0, 줄 단위(newline-delimited) JSON. 로그는 stderr 로만 남긴다. */
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
-const SERVER = { name: 'api-book', version: '1.1.0' };
+const SERVER = { name: 'api-book', version: '1.2.0' };
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
 /* ---------- 데이터 적재 ---------- */
@@ -109,14 +109,28 @@ function pickVersion(m, v, query) {
 const rec = (m, v) => core(v).byId.get(m.id[v]);
 const lim = (x, dflt, max) => Number.isInteger(x) && x > 0 ? Math.min(max, x) : dflt;
 const optStr = (a, k) => { if (a[k] !== undefined && typeof a[k] !== 'string') throw new Error(`${k} 는 문자열이어야 합니다`); return a[k]; };
-const verArg = a => { const v = optStr(a, 'version'); if (v && !VERS.includes(v)) throw new Error(`지원하지 않는 버전: ${v} (가능: ${VERS.join(', ')})`); return v; };
+const verArg = a => { const v = optStr(a, 'version'); if (v !== undefined && !VERS.includes(v)) throw new Error(`지원하지 않는 버전: ${v} (가능: ${VERS.join(', ')})`); return v; };
 const cut = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const gvOf = (m, v) => (m.group ? m.group + '/' : '') + m.gv[v];
+function sourceOf(m, version) {
+  return { version, apiVersion: gvOf(m, version), docUrl: rec(m, version).url };
+}
 const TYPE = { imm: '변경 불가', dep: '폐지 예정', prev: '미리보기/기능 게이트', single: '싱글턴', excl: '상호 배타', cond: '조건부', limit: '값 제한' };
 const brief = (m, v) => ({ id: m.id[v], kind: m.kind, group: m.group || 'core', apiVersion: gvOf(m, v), book: m.book, namespaced: m.ns, versions: m.vers, tier: m.tier || undefined, constraints: m.countsByVersion[v] });
 
 /* ---------- 도구 ---------- */
 const VER = { type: 'string', enum: VERS, get description() { return `문서 버전 (기본 ${LATEST})`; } };
+function assessVersion(sim, entries, version) {
+  const engine = core(version), schemas = new Map();
+  return sim.assessDocuments(entries, engine.E.docs, id => {
+    if (!schemas.has(id)) {
+      const record = engine.byId.get(id);
+      schemas.set(id, sim.makeSchema(record, fieldsOf(version, record)));
+    }
+    return schemas.get(id);
+  });
+}
+
 const TOOLS = [
   { name: 'search_apis', description: '컨테이너 플랫폼 API(예: route.openshift.io/Route, apps/Deployment)를 키워드로 검색한다(한글·영문, Kind, 필드 경로, 제약 문장 지원). 같은 API 는 버전과 무관하게 한 번만 나온다.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: '검색어 (예: "route tls termination", "pvc", "spec.tls.termination", "deprecated")' }, limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 }, version: { ...VER, description: '생략하면 모든 문서 버전을 통합 검색합니다' } }, required: ['query'] },
@@ -151,29 +165,47 @@ const TOOLS = [
     run(a) {
       const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v), d = r.d || {};
       return Object.assign(brief(m, v), {
-        version: v, apiVersion: gvOf(m, v), docUrl: r.url, description: cut(d.desc, 1500),
+        ...sourceOf(m, v), description: cut(d.desc, 1500),
         availability: m.vers.length === VERS.length ? '모든 버전에서 제공' : `제공 버전: ${m.vers.join(', ')} (없는 버전: ${VERS.filter(x => !m.vers.includes(x)).join(', ')})`,
         required: d.required || [], topLevelFields: (d.props || []).filter(p => !/^(apiVersion|kind)$/.test(p.n)).map(p => ({ name: p.n, type: p.t, description: cut(p.d, 200) })),
         endpoints: (d.eps || []).map(e => ({ path: e.p, methods: e.ms.map(x => `${x.m}: ${x.d}`),
           queryParametersByMethod: Object.fromEntries(e.ms.map(x => [x.m, x.q || []])) })),
       });
     } },
-  { name: 'get_fields', description: '중첩 필드 상세. path 가 비면 최상위 필드, "spec.tls" 처럼 주면 그 하위 필드(타입·필수·설명)를 돌려준다. 배열 하위는 "spec.rules[]" 형식.',
-    inputSchema: { type: 'object', properties: { api: { type: 'string' }, path: { type: 'string', description: '비우면 최상위' }, version: VER }, required: ['api'] },
+  { name: 'get_fields', description: 'OpenShift 필드의 정확한 경로를 조회한다. field는 조회한 속성, fields는 직계 하위 속성이다. required는 바로 위 객체 안에서의 스키마 필수 여부다. 같은 릴리스의 apiVersion과 공식 docUrl을 함께 반환한다.',
+    inputSchema: { type: 'object', properties: { api: { type: 'string' }, path: { type: 'string', description: '생략하면 최상위. 예: spec.tls, spec.tls.termination, spec.rules[].host. 배열 원소의 속성 목록은 spec.rules[].' }, version: VER }, required: ['api'] },
     run(a) {
-      const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v), p = (optStr(a, 'path') || '').trim().replace(/^\./, '');
-      let children, required;
-      if (!p) { children = (r.d.props || []).map(x => [x.n, x.t, x.d]); required = r.d.required || []; }
-      else {
-        const e = fieldsOf(v, r).find(x => x.p === '.' + p);
-        if (!e) throw new Error(`경로를 찾지 못했습니다: ${p}. 상위 경로에서 get_fields 로 하위 필드를 확인하세요.`);
-        children = e.r; required = e.q || [];
+      const m = resolve(a.api), v = pickVersion(m, verArg(a), a.api), r = rec(m, v);
+      const p = (optStr(a, 'path') || '').trim().replace(/^\./, '');
+      const nodes = new Map(fieldsOf(v, r).map(e => [e.p, e]));
+      const top = { r: (r.d.props || []).map(x => [x.n, x.t, x.d]), q: r.d.required || [] };
+      const nodeAt = path => path ? nodes.get('.' + path) : top;
+      const slotKind = name => name.endsWith('{}') ? 'mapValue' : name.endsWith('[]') ? 'arrayItem' : null;
+      function describe([name, type, description], parentPath, parent, detailed = false) {
+        const path = parentPath ? parentPath + '.' + name : name;
+        const itemsPath = path + '[]';
+        const hasItems = nodes.has('.' + itemsPath) || parent.r.some(c => c[0] === name + '[]');
+        const valuesPath = path + '{}';
+        const hasValues = nodes.has('.' + valuesPath) || parent.r.some(c => c[0] === name + '{}');
+        const pathKind = slotKind(name);
+        const full = cut(description, Infinity);
+        return { name, path, type, required: (parent.q || []).includes(name), description: detailed ? full : full.slice(0, 400),
+          ...(!detailed && full.length > 400 ? { descriptionTruncated: true } : {}),
+          ...(pathKind ? { pathKind } : {}), hasChildren: nodes.has('.' + path) || hasItems || hasValues,
+          ...(hasItems ? { itemsPath } : {}), ...(hasValues ? { valuesPath } : {}) };
       }
-      const known = new Set(fieldsOf(v, r).map(x => x.p));
-      return { api: `${m.group || 'core'}/${m.kind}`, version: v, path: p || '(최상위)', fields: children.filter(c => !c[0].endsWith('[]')).map(([n, t, d]) => {   // 'x[]' 는 배열 항목 표시용 보조 행이라 뺀다
-        const sub = (p ? p + '.' : '') + n;
-        return { name: n, type: t, required: required.includes(n), description: cut(d, 400), hasChildren: known.has('.' + sub) || known.has('.' + sub + '[]') };
-      }) };
+      const node = nodeAt(p);
+      const dot = p.lastIndexOf('.');
+      const parentPath = dot < 0 ? '' : p.slice(0, dot);
+      const parent = nodeAt(parentPath);
+      const row = p && parent?.r.find(c => c[0] === p.slice(dot + 1));
+      const pathKind = slotKind(p);
+      const field = row && !pathKind ? describe(row, parentPath, parent, true) : null;
+      if (!node && !row) throw new Error(`경로를 찾지 못했습니다: ${p}. 상위 경로에서 get_fields 로 하위 필드를 확인하세요.`);
+      const fields = node ? node.r.filter(c => !c[0].endsWith('[]')).map(c => describe(c, p, node)) : [];
+      return { api: (m.group || 'core') + '/' + m.kind, ...sourceOf(m, v), path: p || '(최상위)', field, fields,
+        ...(pathKind ? { pathKind } : {}),
+        ...(node ? { requiredChildPaths: (node.q || []).map(name => p ? p + '.' + name : name) } : {}) };
     } },
   { name: 'get_constraints', description: 'API 의 제약·제한 사항(변경 불가, 폐지 예정, 미리보기, 싱글턴, 상호 배타, 조건부, 값 제한)과 각 제약이 적용되는 버전, 호환성 레벨. 원문 설명 문장에서 추출한 것이므로 정확한 내용은 원문을 확인한다.',
     inputSchema: { type: 'object', properties: { api: { type: 'string' }, version: VER, type: { type: 'string', enum: Object.keys(TYPE) } }, required: ['api'] },
@@ -194,16 +226,43 @@ const TOOLS = [
           pathsByVersion: scopedPaths ? { [version]: scopedPaths } : c.pathsByVersion });
         shownCounts[c.t] = (shownCounts[c.t] || 0) + 1;
       }
-      return { api: `${m.group || 'core'}/${m.kind}`, version, versions: m.vers, tier: m.tier, counts: version ? m.countsByVersion[version] : m.constraintTotals || m.flags,
+      return { api: `${m.group || 'core'}/${m.kind}`, ...(version ? sourceOf(m, version) : {}), versions: m.vers, tier: m.tier, counts: version ? m.countsByVersion[version] : m.constraintTotals || m.flags,
         shownCounts: version ? shownCounts : m.flags, constraints: list, note: '설명 문장에서 정규식으로 추출한 요약입니다.' };
     } },
-  { name: 'compare_versions', description: 'API 의 버전 간 차이(필드 추가/삭제, 타입 변경, 필수 여부 변경, 엔드포인트 변경).',
-    inputSchema: { type: 'object', properties: { api: { type: 'string' } }, required: ['api'] },
+  { name: 'compare_versions', description: 'API 의 버전 간 차이(필드 추가/삭제, 타입 변경, 필수 여부 변경, 엔드포인트 변경, 문서에 추출된 제약 문장 변경).',
+    inputSchema: { type: 'object', properties: { api: { type: 'string' }, from: VER, to: VER }, required: ['api'] },
     run(a) {
       const m = resolve(a.api);
-      return { api: `${m.group || 'core'}/${m.kind}`, versions: m.vers, availability: Object.fromEntries(VERS.map(v => [v, m.vers.includes(v)])),
+      if (a.from !== undefined || a.to !== undefined) {
+        if (!VERS.includes(a.from) || !VERS.includes(a.to) || a.from === a.to) throw new Error('서로 다른 두 지원 릴리스를 from과 to로 지정하세요.');
+        return { api: (m.group || 'core') + '/' + m.kind, ...ApiSearch.compareReleases(m, a.from, a.to),
+          sources: Object.fromEntries([a.from, a.to].map(v => [v, m.vers.includes(v) ? sourceOf(m, v) : null])) };
+      }
+      return { truncated: !!m.diffTrunc, api: `${m.group || 'core'}/${m.kind}`, versions: m.vers, availability: Object.fromEntries(VERS.map(v => [v, m.vers.includes(v)])),
         fieldChanges: m.fdiff || [], typeChanges: m.tdiff || [], requiredChanges: m.rdiff || [], endpointChanges: m.ediff || [],
         note: '항목의 v 는 그 필드가 존재하는 버전 목록, sub 는 함께 묶인 하위 항목 수입니다.' };
+    } },
+  { name: 'validate_manifest', description: '한 릴리스(version)에서 문서를 검증하거나 두 릴리스(from, to) 사이 문서별 진단 변화를 확인한다.',
+    inputSchema: { type: 'object', properties: { manifest: { type: 'string' }, version: VER, from: VER, to: VER }, required: ['manifest'] },
+    run(a) {
+      const sim = require('../sim'), entries = sim.manifestDocuments(optStr(a, 'manifest'));
+      if (a.from !== undefined || a.to !== undefined) {
+        if (a.version !== undefined || !VERS.includes(a.from) || !VERS.includes(a.to) || a.from === a.to)
+          throw new Error('비교에는 서로 다른 from과 to만 지정하세요.');
+        return { from: a.from, to: a.to, documents: sim.upgradeImpact(assessVersion(sim, entries, a.from), assessVersion(sim, entries, a.to)) };
+      }
+      const v = verArg(a) || LATEST, documents = assessVersion(sim, entries, v);
+      return { version: v, valid: documents.every(d => d.valid), documents };
+    } },
+  { name: 'get_catalog_status', description: '카탈로그가 사용하는 릴리스별 원본 커밋과 문서 URL을 반환한다.',
+    inputSchema: { type: 'object', properties: { version: VER } },
+    run(a) {
+      const v = verArg(a);
+      load('versions.js');
+      return { releases: (v ? [v] : VERS).map(version => {
+        const { revision, revisionDate, branch, overview } = ctx.VERSIONS.sources[version];
+        return { version, revision, revisionDate, branch, overview };
+      }) };
     } },
   { name: 'generate_manifest', description: '필수 필드만 채운 YAML 뼈대를 만든다(값은 자리표시자). 실제 클러스터에 적용하기 전에 값을 채워야 한다.',
     inputSchema: { type: 'object', properties: { api: { type: 'string' }, version: VER, name: { type: 'string', default: 'example' }, namespace: { type: 'string', default: 'default' } }, required: ['api'] },
@@ -245,9 +304,13 @@ const TOOLS = [
       };
       const top = (r.d.props || []).filter(p => !/^(apiVersion|kind|metadata|status)$/.test(p.n)).map(p => [p.n, p.t]);
       lines.push(...emit(0, '', top, r.d.required || [], 0));
-      const head = [`apiVersion: ${gvOf(m, v)}`, `kind: ${m.kind}`, 'metadata:', `  name: ${yamlString(name)}`].concat(m.ns ? [`  namespace: ${yamlString(ns)}`] : []);
+      const head = [`apiVersion: ${gvOf(m, v)}`, `kind: ${m.kind}`];
+      if (require('../sim').needsName(r)) {
+        head.push('metadata:', '  name: ' + yamlString(name));
+        if (m.ns) head.push('  namespace: ' + yamlString(ns));
+      }
       const yaml = head.concat(lines).join('\n') + '\n';
-      return { api: `${m.group || 'core'}/${m.kind}`, version: v, namespaced: m.ns, yaml, note: '필수 필드만 포함한 뼈대입니다. "<...>" 와 0/false 는 자리표시자이고, 문서에 하위 필드가 없는 참조 타입은 {} 로 남습니다(LabelSelector·PodTemplateSpec 은 기본 틀 제공). 제약은 get_constraints 로 확인하세요.' };
+      return { api: `${m.group || 'core'}/${m.kind}`, ...sourceOf(m, v), namespaced: m.ns, yaml, note: '필수 필드만 포함한 뼈대입니다. "<...>" 와 0/false 는 자리표시자이고, 문서에 하위 필드가 없는 참조 타입은 {} 로 남습니다(LabelSelector·PodTemplateSpec 은 기본 틀 제공). 제약은 get_constraints 로 확인하세요.' };
     } },
 ];
 

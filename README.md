@@ -1,5 +1,7 @@
 # API Book
 
+기본 화면은 한국어입니다. 상단의 **EN** 또는 **한국어**를 눌러 같은 릴리스와 페이지의 언어를 전환하세요. 영문 주소는 `index.html?lang=en`이며 로컬 파일에서도 사용할 수 있습니다. 시뮬레이터나 YAML 입력이 있는 비교 화면에서는 편집 중인 탭을 보존하고 새 탭에서 전환합니다.
+
 Kubernetes 계열 컨테이너 플랫폼의 API 문서를 모아 만든, 검색 가능한 **API 레퍼런스 북**입니다.
 데이터는 공개된 OpenShift Container Platform 5.0 / 4.22 / 4.21 / 4.20 API 문서(Apache License 2.0)에서 수집했습니다.
 **배포 주소: <https://yjj3019.github.io/OCP-APIBook/>**
@@ -34,7 +36,7 @@ Claude Code에서는 Node.js가 설치된 환경에서 이 저장소의 루트 �
 
 다른 AI 클라이언트가 로컬 MCP(stdio)를 지원하면 서버 이름은 `api-book`, 실행 명령은 `node`, 인자는 이 저장소의 `mcp/server.js` 절대 경로로 지정합니다. 클라이언트가 서버 프로세스를 시작합니다. API 키나 클러스터 자격 증명은 필요하지 않습니다.
 
-연결 후 “API Book에서 4.22 Route의 `spec.tls` 하위 필드와 필수 여부를 알려줘”라고 물어보세요. AI는 `get_fields`에 `{"api":"route.openshift.io/Route","version":"4.22","path":"spec.tls"}`를 전달해 필드명·타입·설명을 조회할 수 있습니다.
+연결 후 “API Book에서 4.22 Route의 `spec.tls` 하위 필드와 필수 여부를 알려줘”라고 물어보세요. AI는 `get_fields`에 `{"api":"route.openshift.io/Route","version":"4.22","path":"spec.tls"}`를 전달해 조회한 필드와 하위 필드의 필수 여부, 리소스 API 버전, 같은 릴리스의 공식 문서 링크를 한 번에 확인할 수 있습니다.
 
 | 도구 | 역할 |
 |---|---|
@@ -45,6 +47,8 @@ Claude Code에서는 Node.js가 설치된 환경에서 이 저장소의 루트 �
 | `get_constraints` | 제약·제한 사항과 적용 버전. `version`을 지정하면 해당 릴리스의 필드 경로와 개수를 반환 |
 | `compare_versions` | 수록 버전 사이 필드·타입·필수·엔드포인트 차이 |
 | `generate_manifest` | 필수 필드만 채운 YAML 뼈대 |
+| `validate_manifest` | 여러 YAML·JSON 문서의 릴리스별 필드 검증 |
+| `get_catalog_status` | 수록 원본 커밋, 날짜, 문서 주소 |
 
 `node mcp/smoke.js` 로 stdio 왕복 테스트를 돌릴 수 있습니다. 제약 사항은 웹 화면과 같은 추출 결과라서 같은 한계가 있습니다.
 
@@ -58,7 +62,7 @@ Claude Code, Codex, Grok Build에서 같은 [OpenShift API Book 스킬](skills/o
 | Codex CLI·IDE | `~/.agents/skills/ocp-api-book` | `$ocp-api-book` |
 | Grok Build CLI | Codex와 같은 `~/.agents/skills/ocp-api-book` | `/ocp-api-book` |
 
-“OpenShift 4.22에서 Route에 edge TLS를 설정하는 Helm 템플릿을 작성해줘”처럼 요청하면 에이전트가 작업에 맞춰 스킬을 선택할 수 있습니다. MCP가 연결돼 있으면 해당 도구를 사용하고, 로컬에서는 Node.js로 같은 카탈로그를 조회합니다.
+“OpenShift 4.22에서 Route에 edge TLS를 설정하는 Helm 템플릿을 작성해줘”처럼 요청하면 에이전트가 작업에 맞춰 스킬을 선택할 수 있습니다. 호스트의 자동 선택은 요청에 따라 달라집니다. 같은 스킬을 지정하려면 위 표의 호출명을 사용하세요. 스킬을 거치지 않고 MCP의 `get_fields`를 직접 호출해도 로컬 CLI와 같은 필드 정보와 공식 출처를 받습니다.
 
 ```sh
 node skills/ocp-api-book/scripts/query.cjs get_fields api=route.openshift.io/Route version=4.22 path=spec.tls
@@ -115,7 +119,7 @@ API 문서 현행화는 `npm ci --prefix tools/refresh` 후 `python tools/refres
 - **원문 HTML**: 가이드 본문은 허용 태그·속성만 남기고 렌더링합니다.
 - **캐시**: 페이지는 JavaScript, CSS, 데이터 파일마다 SHA-256을 URL과 무결성 값으로 사용합니다. 로컬 서버는 요청한 해시와 일치하는 파일에 장기 캐시를 허용합니다. 새 배포로 이전 파일을 불러올 수 없을 때는 페이지를 새로고침하세요.
 - **외부 요청**: 없습니다. 웹 글꼴은 포함하지도 불러오지도 않으며 모든 글자는 사용자 기기의 시스템 글꼴로 표시합니다. 서비스 워커(`sw.js`)가 재방문 속도와 오프라인 동작을 돕습니다(`?nosw` 로 끌 수 있음). 검색어와 입력은 외부로 나가지 않습니다.
-- **저장소 사용**: 즐겨찾기·최근 본 API·테마·버전·시뮬레이터 초안이 브라우저 `localStorage` 에 저장됩니다(서버로 전송되지 않음).
+- **저장소 사용**: 즐겨찾기·최근 본 API·테마·버전은 브라우저 `localStorage`에, 자동 저장한 시뮬레이터 초안은 `IndexedDB`에 보관합니다. 해당 릴리스의 시뮬레이터를 열면 이전 초안을 합칩니다. 같은 이름의 편집 내용이 다르면 두 편집본을 보존합니다.
 
 ## 라이선스와 상표
 
@@ -138,3 +142,11 @@ API 문서 현행화는 `npm ci --prefix tools/refresh` 후 `python tools/refres
 - 사용 예시(YAML, `oc`, REST)는 이름·그룹/버전·필수 필드로 만든 기본 틀입니다.
 - 시뮬레이터의 검증과 가상 응답은 문서의 스키마 규칙만 사용합니다. 어드미션 웹훅, 기본값 적용, RBAC, 실제 충돌 검사는 반영하지 않습니다. "허용 값" 경고는 설명 문장에서 뽑은 힌트라 틀릴 수 있습니다.
 - 원문 4.20 API index에 `IPAddressClaim` 행이 중복되어 하나만 남겼습니다.
+
+## 설계와 업그레이드 검토
+
+- 시뮬레이터에서 여러 YAML 문서를 `---`로 구분해 가져오면 릴리스의 `apiVersion`과 `kind`에 맞춰 문서별 필드 오류를 확인할 수 있습니다. 지원하는 리소스는 각각 편집 탭에 열립니다.
+- Secret, TLS 개인 키가 있는 Route, 토큰이 있는 TokenReview, 직접 입력한 패치 본문은 초안 전체를 메모리에서만 편집합니다. 리소스 목록과 `kubectl.kubernetes.io/last-applied-configuration`에 포함된 값도 확인하며, 해석할 수 없는 적용 기록은 메모리에만 둡니다. 두 탭이 같은 초안을 수정하면 새로고침 후 충돌 보관본과 현재 초안을 확인할 수 있습니다. 다른 리소스에 인증 정보가 있다면 입력 전에 자동 저장을 끄세요. 저장본 지우기는 모든 릴리스의 시뮬레이터 초안을 지우고 자동 저장을 끕니다.
+- 버전 비교에서 기준·대상 릴리스를 선택하면 필수 여부와 문서 제약의 변경을 확인할 수 있습니다. **내 YAML 업그레이드 영향 검사**는 입력을 저장하지 않고 문서마다 새로 발생하거나 해소된 오류·경고를 보여 줍니다. 스킬과 MCP는 `compare_versions`, `validate_manifest`, `get_catalog_status`를 제공합니다.
+- 홈의 **카탈로그 원본과 갱신 상태**에서 수록 원본과 최신 원본을 비교하거나 갱신 PR을 열 수 있습니다. 최신 원본 조회 버튼을 누를 때만 GitHub에 원본 커밋을 요청합니다.
+- 전체 토폴로지의 **두 API 사이의 관계 경로 찾기**에서 출발과 도착을 선택하면 켜 둔 관계 종류를 따라 최단 경로와 단계별 근거가 표시됩니다.

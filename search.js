@@ -362,6 +362,47 @@
         fp: [...new Set([...paths, ...Object.keys(fieldVersions)])], fieldVersions, cons: m.cons };
     });
   }
-  const api = { create, CAT_KO, unifiedRecords };
+  function constraintChanges(m, from, to) {
+    const fields = new Map();
+    for (const c of m.cons || []) {
+      for (const v of [from, to]) {
+        if (!c.v.includes(v)) continue;
+        for (const path of c.pathsByVersion ? c.pathsByVersion[v] || [] : c.ps || [c.p]) {
+          if (!fields.has(path)) fields.set(path, { [from]: new Set(), [to]: new Set() });
+          fields.get(path)[v].add(c.x);
+        }
+      }
+    }
+    const changes = [];
+    for (const [path, sides] of fields) {
+      const removed = [...sides[from]].filter(x => !sides[to].has(x));
+      const added = [...sides[to]].filter(x => !sides[from].has(x));
+      if (removed.length || added.length) changes.push({ path, from: removed, to: added });
+    }
+    return changes;
+  }
+  function compareReleases(m, from, to) {
+    const base = m.vers.includes(from), target = m.vers.includes(to);
+    const result = { from, to, availability: { [from]: base, [to]: target },
+      apiVersions: [base ? m.gv[from] : null, target ? m.gv[to] : null],
+      fieldChanges: [], typeChanges: [], requiredChanges: [], endpointChanges: [], constraintChanges: [], constraintsTruncated: !!m.trunc, truncated: !!m.diffTrunc };
+    if (!base || !target) return result;
+    result.constraintChanges = constraintChanges(m, from, to);
+    function changes(entries, key) {
+      return (entries || []).filter(e => e.v.includes(from) !== e.v.includes(to))
+        .map(e => ({ [key]: e[key], change: e.v.includes(to) ? 'added' : 'removed', ...(e.sub ? { sub: e.sub } : {}) }));
+    }
+    result.fieldChanges = changes(m.fdiff, 'p');
+    result.endpointChanges = changes(m.ediff, 'e');
+    result.typeChanges = (m.tdiff || []).filter(e => e.t[from] && e.t[to] && e.t[from] !== e.t[to])
+      .map(e => ({ path: e.p, from: e.t[from], to: e.t[to] }));
+    const present = (p, v) => !(m.fdiff || []).some(e => !e.v.includes(v) && (p === e.p || p.startsWith(e.p + '.') || p.startsWith(e.p + '[]') || p.startsWith(e.p + '{}')));
+    result.requiredChanges = (m.rdiff || []).filter(e => e.v.includes(from) !== e.v.includes(to)).map(e => {
+      const state = v => e.v.includes(v) ? 'required' : present(e.p, v) ? 'optional' : 'absent';
+      return { path: e.p, from: state(from), to: state(to), ...(e.sub ? { sub: e.sub } : {}) };
+    });
+    return result;
+  }
+  const api = { create, CAT_KO, unifiedRecords, compareReleases };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ApiSearch = api;
 })(typeof window !== 'undefined' ? window : globalThis);

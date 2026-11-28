@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /* 토폴로지(전체 관계도)와 API 상세의 '연결 관계' 화면 */
 (function (root) {
-  const TL = { mention: '문서에서 언급', curated: '일반 관계', same: '같은 이름', variant: '이름 변형', group: '같은 그룹' };
-  const TB = { mention: '문서', curated: '일반', same: '동명', variant: '변형', group: '그룹' };
+  const ui = window.ApiBookLocale.text;
+  const TL = { mention: ui('문서에서 언급'), curated: ui('일반 관계'), same: ui('같은 이름'), variant: ui('이름 변형'), group: ui('같은 그룹') };
+  const TB = { mention: ui('문서'), curated: ui('일반'), same: ui('동명'), variant: ui('변형'), group: ui('그룹') };
   const TIP = {
-    mention: '이 문서의 설명·필드 설명에 상대 API 이름이 나오는 경우',
-    curated: '컨테이너 플랫폼의 일반적인 구조를 바탕으로 정리한 관계(이 문서에서 추출한 것이 아님)',
-    same: '이름은 같고 API 그룹이 다른 경우', variant: '이름 끝부분이 다른 API 이름과 같은 경우(예: ClusterRoleBinding → RoleBinding)', group: '같은 API 그룹에 속한 경우',
+    mention: ui('이 문서의 설명·필드 설명에 상대 API 이름이 나오는 경우'),
+    curated: ui('컨테이너 플랫폼의 일반적인 구조를 바탕으로 정리한 관계(이 문서에서 추출한 것이 아님)'),
+    same: ui('이름은 같고 API 그룹이 다른 경우'), variant: ui('이름 끝부분이 다른 API 이름과 같은 경우(예: ClusterRoleBinding → RoleBinding)'), group: ui('같은 API 그룹에 속한 경우'),
   };
   let C = null, catIdx = {};
 
@@ -27,8 +28,8 @@
   /* ---------- 설명 패널 ---------- */
   const RANK = { curated: 0, mention: 1, variant: 2, same: 3, group: 4 };
   // 같은 상대 API로 가는 관계(일반+문서 언급 등)는 한 항목으로 합친다
-  function relItems(id, types) {
-    const G = C.G, out = new Map(), inn = new Map(), sym = new Map();
+  function relItems(id, types, groupEdges) {
+    const G = C.G, out = new Map(), inn = new Map(), sym = new Map(), group = new Map();
     const put = (m, other, e) => {
       let r = m.get(other); if (!r) m.set(other, r = { other, pairs: [], types: [] });
       (e.labels.length ? e.labels : ['']).forEach(l => r.pairs.push([RANK[e.type], l]));
@@ -39,10 +40,13 @@
       const other = e.s === id ? e.t : e.s;
       put(e.type === 'same' ? sym : e.s === id ? out : inn, other, e);
     }
+    for (const e of groupEdges || []) {
+      if (e.s === id || e.t === id) put(group, e.s === id ? e.t : e.s, e);
+    }
     const arr = m => [...m.values()].map(r => {
       r.pairs.sort((a, b) => a[0] - b[0]); r.labels = [...new Set(r.pairs.map(p => p[1]).filter(Boolean))]; r.types.sort((a, b) => RANK[a] - RANK[b]); r.rank = RANK[r.types[0]]; return r;
     }).sort((a, b) => a.rank - b.rank || G.byId.get(a.other).kind.localeCompare(G.byId.get(b.other).kind));
-    return { out: arr(out), inn: arr(inn), sym: arr(sym) };
+    return { out: arr(out), inn: arr(inn), sym: arr(sym), group: arr(group) };
   }
   function item(r) {
     const n = C.G.byId.get(r.other), label = r.labels.slice(0, 2).join(' · ');
@@ -50,24 +54,26 @@
   }
   function infoHTML(id, types, opt) {
     opt = opt || {};
-    if (!id) return `<div class="ihelp"><b>노드를 눌러 보세요</b><p>API를 지정하면 설명과 연결 관계가 여기에 표시됩니다. 마우스를 올리면 간단한 설명이 말풍선으로 나옵니다.</p>
+    if (!id) return ui`<div class="ihelp"><b>노드를 눌러 보세요</b><p>API를 지정하면 설명과 연결 관계가 여기에 표시됩니다. 마우스를 올리면 간단한 설명이 말풍선으로 나옵니다.</p>
       <p class="note">실선은 이 문서의 본문에서 찾은 관계, 점선은 일반적인 구조를 정리한 관계입니다.</p></div>`;
     const G = C.G, n = G.byId.get(id), d = doc(id), a = d.a, x = a.d;
-    const scope = d.ns ? '네임스페이스 범위' : (x && x.eps.length ? '클러스터 범위' : '');
-    const rel = relItems(id, types), first = firstSentence(x && x.desc), full = fullDesc(x && x.desc), rest = full.replace(/\s+/g, ' ').slice(first.length).trim();
+    const scope = d.ns ? ui('네임스페이스 범위') : (x && x.eps.length ? ui('클러스터 범위') : '');
+    const rel = relItems(id, types, opt.groupEdges), first = firstSentence(x && x.desc), full = fullDesc(x && x.desc), rest = full.replace(/\s+/g, ' ').slice(first.length).trim();
     const rep = rel.out.concat(rel.inn).slice(0, 3).map(r => G.byId.get(r.other).kind + (r.labels[0] ? `(${r.labels[0]})` : '')).join(', ');
-    const summary = (rel.out.length || rel.inn.length || rel.sym.length)
-      ? `<p class="isum"><b>${esc(a.kind)}</b> — 가리킴 ${rel.out.length}개 · 참조됨 ${rel.inn.length}개${rel.sym.length ? ` · 같은 이름 ${rel.sym.length}개` : ''}${rep ? `<br><span class="rl">대표 연결: ${esc(rep)}</span>` : ''}</p>`
-      : `<p class="isum">선택한 관계 종류에서는 연결된 API가 없습니다. 위에서 관계 종류를 켜 보세요.</p>`;
+    const symmetric = (rel.sym.length ? ui` · 같은 이름 ${rel.sym.length}개` : '') +
+      (rel.group.length ? ui` · 같은 그룹 ${rel.group.length}개` : '');
+    const summary = (rel.out.length || rel.inn.length || symmetric)
+      ? ui`<p class="isum"><b>${esc(a.kind)}</b> — 가리킴 ${rel.out.length}개 · 참조됨 ${rel.inn.length}개${symmetric}${rep ? ui`<br><span class="rl">대표 연결: ${esc(rep)}</span>` : ''}</p>`
+      : ui`<p class="isum">선택한 관계 종류에서는 연결된 API가 없습니다. 위에서 관계 종류를 켜 보세요.</p>`;
     const sec = (title, arr) => arr.length ? `<div class="rs"><div class="rt">${title} <span>${arr.length}</span></div><div class="rl2">${arr.slice(0, 40).map(item).join('')}</div></div>` : '';
-    return `<div class="ihead"><span class="idot" style="background:${colorOf(n)}"></span><div><div class="ikind">${esc(a.kind)}</div>
+    return ui`<div class="ihead"><span class="idot" style="background:${colorOf(n)}"></span><div><div class="ikind" tabindex="-1">${esc(a.kind)}</div>
       <div class="igv">${esc(d.gv)}</div></div></div>
       <div class="imeta">${scope ? `<span class="tag">${scope}</span>` : ''}<span class="tag">${esc(C.CAT[a.book] || '')}</span></div>
       <p class="idesc">${esc(first)}</p>
-      ${rest ? `<details class="imore"><summary>설명 더 보기</summary><div class="ifull">${esc(rest)}</div></details>` : ''}
+      ${rest ? ui`<details class="imore"><summary>설명 더 보기</summary><div class="ifull">${esc(rest)}</div></details>` : ''}
       ${summary}
-      ${sec('이 API가 가리키는 것', rel.out)}${sec('이 API를 가리키는 것', rel.inn)}${sec('같은 이름', rel.sym)}
-      <div class="iact"><button class="btn" data-act="open">상세 보기</button>${opt.focusBtn ? `<button class="btn ghost" data-act="focus">${opt.focused ? '전체 다시 보기' : '연결된 API만 보기'}</button>` : ''}</div>`;
+      ${sec(ui('이 API가 가리키는 것'), rel.out)}${sec(ui('이 API를 가리키는 것'), rel.inn)}${sec(ui('같은 이름'), rel.sym)}${sec(ui('같은 그룹'), rel.group)}
+      <div class="iact"><button class="btn" data-act="open">상세 보기</button>${opt.focusBtn ? `<button class="btn ghost" data-act="focus">${opt.focused ? ui('전체 다시 보기') : ui('연결된 API만 보기')}</button>` : ''}</div>`;
   }
 
   /* ---------- 호버 말풍선 ---------- */
@@ -93,7 +99,7 @@
   /* ---------- API 상세: 연결 관계(중심 API 기준) ---------- */
   function mountEgo(host, centerId) {
     const G = C.G, state = { depth: 1, types: { mention: true, curated: true, same: true, variant: true, group: false }, sel: centerId };
-    host.innerHTML = `<h3>연결 관계</h3>
+    host.innerHTML = ui`<h3>연결 관계</h3>
       <div class="tctl"><div class="tchips">${typeChips(state, true)}</div>
       <div class="seg" role="group" aria-label="탐색 깊이"><button data-depth="1" aria-pressed="true">1단계</button><button data-depth="2" aria-pressed="false">2단계</button></div></div>
       <div class="egobox"><div class="gcv"><canvas role="img" aria-label="API 연결 관계도"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div></div>
@@ -102,6 +108,7 @@
     const cv = host.querySelector('canvas'), info = host.querySelector('#egoinfo'), box = host.querySelector('.gcv');
     const hover = tipFor(box);
     const view = new GraphView(cv, { embedded: true, labels: 'all', rep: 900, edgeLen: 95, gravity: 0.004, dimEdge: 0.3, dimNode: 0.5, onSelect: n => { if (n) selectNode(n.id); }, onHover: hover });
+    let groupEdges = [];
     function build() {
       const edgeOk = e => state.types[e.type], set = new Map([[centerId, 0]]), cap = state.depth === 1 ? 30 : 46;
       let frontier = [centerId];
@@ -111,8 +118,9 @@
         frontier = next;
       }
       const gedges = [], me = G.byId.get(centerId);
-      if (state.types.group && me.group) G.nodes.filter(n => n !== me && n.group === me.group).slice(0, 14).forEach(n => { if (!set.has(n.id)) set.set(n.id, 1); gedges.push({ s: centerId, t: n.id, type: 'group', labels: ['같은 그룹'], w: 1 }); });
+      if (state.types.group && me.group) G.nodes.filter(n => n !== me && n.group === me.group).slice(0, 14).forEach(n => { if (!set.has(n.id)) set.set(n.id, 1); gedges.push({ s: centerId, t: n.id, type: 'group', labels: [ui('같은 그룹')], w: 1 }); });
       const edges = G.edges.filter(e => edgeOk(e) && set.has(e.s) && set.has(e.t)).concat(gedges);
+      groupEdges = gedges;
       const deg = {}; edges.forEach(e => { deg[e.s] = (deg[e.s] || 0) + 1; deg[e.t] = (deg[e.t] || 0) + 1; });
       const ids = [...set.keys()], n1 = ids.filter(i => set.get(i) === 1), n2 = ids.filter(i => set.get(i) === 2);
       const nodes = ids.map(id => {
@@ -123,16 +131,29 @@
         return node;
       });
       labelFix(nodes);
+      if (!set.has(state.sel)) state.sel = centerId;
       view.setData(nodes, edges, { sel: state.sel, warm: 260 });
       view.select(state.sel); renderInfo();
     }
-    function renderInfo() { info.innerHTML = infoHTML(state.sel, state.types); }
+    function renderInfo() { info.innerHTML = infoHTML(state.sel, state.types, { groupEdges }); }
     function selectNode(id) { state.sel = id; view.select(id); renderInfo(); }
     host.querySelector('.tchips').addEventListener('click', e => { const b = e.target.closest('[data-type]'); if (!b) return; state.types[b.dataset.type] = !state.types[b.dataset.type]; b.setAttribute('aria-pressed', state.types[b.dataset.type]); build(); });
-    host.querySelector('.seg').addEventListener('click', e => { const b = e.target.closest('[data-depth]'); if (!b) return; state.depth = +b.dataset.depth; host.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', x === b)); build(); });
+    function setDepth(depth) {
+      state.depth = depth;
+      host.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.depth === depth));
+    }
+    host.querySelector('.seg').addEventListener('click', e => { const b = e.target.closest('[data-depth]'); if (!b) return; setDepth(+b.dataset.depth); build(); });
     box.addEventListener('click', e => { const z = e.target.closest('[data-z]'); if (!z) return; z.dataset.z === 'fit' ? view.fit() : view.zoomBy(z.dataset.z === 'in' ? 1.3 : 1 / 1.3); });
     info.addEventListener('click', e => {
-      const s = e.target.closest('[data-sel]'); if (s) { selectNode(s.dataset.sel); return; }   // 그래프에 이미 모두 보이므로 화면은 움직이지 않는다
+      const s = e.target.closest('[data-sel]');
+      if (s) {
+        const id = s.dataset.sel;
+        if (!view.map.has(id) && state.depth === 1) { setDepth(2); build(); }
+        if (!view.map.has(id)) { centerId = id; build(); }
+        selectNode(id);
+        info.querySelector('.ikind').focus();
+        return;
+      }
       const a = e.target.closest('[data-act]'); if (a && a.dataset.act === 'open') C.go('api:' + state.sel);
     });
     build();
@@ -141,14 +162,19 @@
 
   /* ---------- 토폴로지 전체 화면 ---------- */
   function mountFull(host, selId) {
-    const G = C.G, E = C.E, cats = [...new Set(G.nodes.map(n => n.book))].sort((a, b) => (C.CAT[a] || a).localeCompare(C.CAT[b] || b, 'ko'));
+    const G = C.G, E = C.E, cats = [...new Set(G.nodes.map(n => n.book))].sort((a, b) => (C.CAT[a] || a).localeCompare(C.CAT[b] || b, window.ApiBookLocale.language));
     const state = { types: { mention: true, curated: true, same: true, variant: true }, sel: selId || null, cat: '', q: '', hideIso: false, focused: false };
     const pos = new Map();
     cats.forEach(b => { if (!(b in catIdx)) catIdx[b] = Object.keys(catIdx).length; });   // 칩 색을 만들기 전에 인덱스를 확정
-    host.innerHTML = `<div class="tctl"><input class="tfind" id="tfind" type="search" placeholder="API 찾아서 강조 (예: route, 네트워크, mcp)" autocomplete="off" aria-label="토폴로지에서 API 찾기">
+    host.innerHTML = ui`<div class="tctl"><input class="tfind" id="tfind" type="search" placeholder="API 찾아서 강조 (예: route, 네트워크, mcp)" autocomplete="off" aria-label="토폴로지에서 API 찾기">
         <label class="chk"><input type="checkbox" id="tiso"> 연결 없는 API 숨기기</label><button class="btn ghost" id="trelay">배치 다시</button></div>
       <div class="tchips" id="ttypes">${typeChips(state, false)}</div>
       <div class="tchips cats" id="tcats">${cats.map(b => `<button class="chip" data-tcat="${b}" aria-pressed="false"><i class="dot" style="background:${GraphColor(catIdx[b], dark())}"></i>${esc(C.CAT[b] || String(b).replace(/_apis$/, '').replace(/_/g, ' '))}</button>`).join('')}</div>
+      <details class="epd" id="path-panel"><summary>두 API 사이의 관계 경로 찾기</summary><div class="in">
+        <div class="tctl"><label>출발 API <select id="path-from"></select></label>
+        <label>도착 API <select id="path-to"></select></label>
+        <button class="btn ghost" id="path-clear">경로 지우기</button></div>
+        <div id="path-result" role="status"></div></div></details>
       <p class="note" id="orbit-help">드래그하거나 그래프에서 방향키를 눌러 회전하세요. 휠이나 두 손가락으로 확대·축소할 수 있습니다.</p>
       <div class="tbody"><div class="gcv big"><canvas tabindex="0" role="img" aria-label="3D API 토폴로지" aria-describedby="orbit-help"></canvas><div class="zbtn"><button data-z="in" aria-label="확대">+</button><button data-z="out" aria-label="축소">−</button><button data-z="fit" aria-label="맞춤">⤢</button></div><div class="gstat" id="tstat"></div></div>
       <div class="tinfo" id="tinfo" aria-live="polite"></div></div>
@@ -157,6 +183,27 @@
     const cv = host.querySelector('canvas'), info = host.querySelector('#tinfo'), box = host.querySelector('.gcv'), stat = host.querySelector('#tstat');
     const hover = tipFor(box);
     const view = new GraphView(cv, { spatial: true, labels: 'auto', rep: 380, edgeLen: 46, gravity: 0.0025, onSelect: n => selectNode(n ? n.id : null), onHover: hover });
+    const from = host.querySelector('#path-from'), to = host.querySelector('#path-to');
+    const choices = G.nodes.slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.group.localeCompare(b.group));
+    for (const select of [from, to]) {
+      select.add(new Option(ui('API 선택'), ''));
+      choices.forEach(n => select.add(new Option(n.kind + ' · ' + (n.group || 'core'), n.id)));
+    }
+    if (state.sel && G.byId.has(state.sel)) from.value = state.sel;
+    function renderPath() {
+      const out = host.querySelector('#path-result');
+      view.pathEdges = null;
+      if (!from.value || !to.value) { out.textContent = ui('출발·도착 API를 고르면 선택한 관계 종류로 방향을 따라 탐색합니다.'); return null; }
+      const path = ApiGraph.shortestPath(G, from.value, to.value, state.types);
+      if (!path) { out.textContent = ui('선택한 관계 종류에서 이 방향으로 이어지는 경로가 없습니다.'); return null; }
+      if (!path.length) { out.textContent = ui('같은 API입니다. 연결 단계는 0개입니다.'); return new Set([from.value]); }
+      view.pathEdges = new Set(path.map(({ edge }) => edge));
+      out.innerHTML = '<ol>' + path.map(step => '<li>' + esc(G.byId.get(step.from).kind) + ' → ' + esc(G.byId.get(step.to).kind) +
+        ' · ' + esc(TL[step.edge.type]) + (step.edge.labels.length ? ' · ' + esc(step.edge.labels.join(', ')) : '') + '</li>').join('') + '</ol>';
+      return new Set([from.value, ...path.map(p => p.to)]);
+    }
+    from.onchange = to.onchange = () => { applyKeep(); if (view.pathEdges) view.fit(); };
+    host.querySelector('#path-clear').onclick = () => { from.value = ''; to.value = ''; applyKeep(); };
     function centers() {
       const cnt = {}; G.nodes.forEach(n => cnt[n.book] = (cnt[n.book] || 0) + 1);
       const total = cats.reduce((s, b) => s + Math.sqrt(cnt[b]), 0), out = {};
@@ -182,24 +229,48 @@
       });
       labelFix(nodes);
       view.setData(nodes, edges, { sel: state.sel, warm: keepPos ? 50 : 200 });
-      view.select(state.sel); applyKeep(); renderInfo(); stat.textContent = `API ${nodes.length}개 · 관계 ${view.edges.length}개`;
+      view.select(state.sel); applyKeep(); renderInfo(); stat.textContent = ui`API ${nodes.length}개 · 관계 ${view.edges.length}개`;
     }
     function savePos() { view.nodes.forEach(n => pos.set(n.id, [n.x, n.y, n.z])); }
+    function matchesCategory(id) { return !state.cat || G.byId.get(id).book === state.cat; }
+    function searchIds() {
+      return E.search(state.q).apis.map(x => x.d.a.url.split('#')[1])
+        .filter(id => view.map.has(id) && matchesCategory(id)).slice(0, 40);
+    }
+    function updateHash() {
+      history.replaceState(null, '', C.hash(state.sel ? 'topology:' + encodeURIComponent(state.sel) : 'topology'));
+    }
     function applyKeep() {
       let keep = null;
-      if (state.q) { const r = E.search(state.q).apis.slice(0, 40); keep = new Set(r.map(x => x.d.a.url.split('#')[1])); }
-      else if (state.cat) keep = new Set(G.nodes.filter(n => n.book === state.cat).map(n => n.id));
+      if (state.q) keep = new Set(searchIds());
+      else if (state.cat) keep = new Set(view.nodes.filter(n => matchesCategory(n.id)).map(n => n.id));
+      const path = renderPath();
+      if (path) keep = keep ? new Set([...keep].filter(id => path.has(id))) : path;
+      if (state.sel && (!view.map.has(state.sel) || (keep && !keep.has(state.sel)))) {
+        state.sel = null; state.focused = false;
+        view.select(null); updateHash(); renderInfo();
+      }
       if (state.focused && state.sel) { const s = new Set([state.sel, ...(view.nb.get(state.sel) || [])]); keep = keep ? new Set([...keep].filter(i => s.has(i))) : s; }
       view.setKeep(keep); syncList(keep); return keep;
     }
     function syncList(keep) {
       const box = host.querySelector('#nlist'); if (!box || !host.querySelector('#nl').open) return;
-      box.innerHTML = [...view.nodes].filter(n => !keep || keep.has(n.id)).sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"${n.id === state.sel ? ' aria-current="true"' : ''}><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('') || '<p class="note">표시할 노드가 없습니다.</p>';
+      box.innerHTML = [...view.nodes].filter(n => !keep || keep.has(n.id)).sort((a, b) => a.label.localeCompare(b.label)).map(n => `<button class="ri" data-nid="${esc(n.id)}" style="width:100%"${n.id === state.sel ? ' aria-current="true"' : ''}><span class="rk">${esc(n.label)}</span><span class="rl">${esc(doc(n.id).gv)}</span></button>`).join('') || ui('<p class="note">표시할 노드가 없습니다.</p>');
     }
     function renderInfo() { info.innerHTML = infoHTML(state.sel, state.types, { focusBtn: !!state.sel, focused: state.focused }); }
     function selectNode(id) {
+      if (id && !view.map.has(id)) return;
+      if (id && !matchesCategory(id)) {
+        host.querySelector('#tcats [aria-pressed="true"]').setAttribute('aria-pressed', 'false');
+        state.cat = '';
+      }
+      if (id && state.q && !searchIds().includes(id)) { state.q = ''; find.value = ''; }
+      if (id && from.value && to.value) {
+        const path = renderPath();
+        if (path && !path.has(id)) { from.value = ''; to.value = ''; }
+      }
       state.sel = id; if (!id) state.focused = false; view.select(id); applyKeep(); renderInfo();
-      history.replaceState(null, '', C.hash(id ? 'topology:' + encodeURIComponent(id) : 'topology'));
+      updateHash();
     }
     host.querySelector('#ttypes').addEventListener('click', e => { const b = e.target.closest('[data-type]'); if (!b) return; state.types[b.dataset.type] = !state.types[b.dataset.type]; b.setAttribute('aria-pressed', state.types[b.dataset.type]); savePos(); build(true); });
     host.querySelector('#tcats').addEventListener('click', e => {
@@ -208,18 +279,22 @@
     });
     const find = host.querySelector('#tfind');
     find.addEventListener('input', () => { state.q = find.value.trim(); applyKeep(); });
-    find.addEventListener('keydown', e => { if (e.key === 'Enter') { const r = state.q && E.search(state.q).apis[0]; if (r) { const id = r.d.a.url.split('#')[1]; state.q = ''; find.value = ''; selectNode(id); view.focusOn(id, 1.6); } } });
+    find.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' || e.isComposing || !state.q) return;
+      const id = searchIds().find(id => !view.keep || view.keep.has(id));
+      if (id) { state.q = ''; find.value = ''; selectNode(id); view.focusOn(id, 1.6); }
+    });
     host.querySelector('#tiso').addEventListener('change', e => { state.hideIso = e.target.checked; savePos(); build(true); });
     host.querySelector('#trelay').addEventListener('click', () => { pos.clear(); build(false); });
     box.addEventListener('click', e => { const z = e.target.closest('[data-z]'); if (!z) return; z.dataset.z === 'fit' ? view.fit() : view.zoomBy(z.dataset.z === 'in' ? 1.3 : 1 / 1.3); });
     info.addEventListener('click', e => {
-      const s = e.target.closest('[data-sel]'); if (s) { selectNode(s.dataset.sel); view.focusOn(s.dataset.sel, Math.max(view.view.k, 1.3)); return; }
+      const s = e.target.closest('[data-sel]'); if (s) { selectNode(s.dataset.sel); view.focusOn(s.dataset.sel, Math.max(view.view.k, 1.3)); info.querySelector('.ikind').focus(); return; }
       const a = e.target.closest('[data-act]'); if (!a) return;
       if (a.dataset.act === 'open') C.go('api:' + state.sel);
       if (a.dataset.act === 'focus') { state.focused = !state.focused; applyKeep(); renderInfo(); if (state.focused) view.focusOn(state.sel, 1.2); else view.fit(); }
     });
     host.querySelector('#nl').addEventListener('toggle', e => { if (e.target.open) applyKeep(); });
-    host.querySelector('#nlist').addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (!b) return; selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.scrollIntoView({ block: 'nearest' }); const k = info.querySelector('.ikind'); if (k) { k.tabIndex = -1; k.focus({ preventScroll: true }); } });
+    host.querySelector('#nlist').addEventListener('click', ev => { const b = ev.target.closest('[data-nid]'); if (!b) return; selectNode(b.dataset.nid); view.focusOn(b.dataset.nid, 1.4); info.querySelector('.ikind').focus(); });
     const onTheme = () => host.querySelectorAll('#tcats [data-tcat]').forEach(b => { const d = b.querySelector('.dot'); if (d) d.style.background = GraphColor(catIdx[b.dataset.tcat] || 0, dark()); });
     window.addEventListener('themechange', onTheme);
     build(false);

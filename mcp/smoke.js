@@ -11,7 +11,7 @@ let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ')
   const i = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
   t('initialize', i.result.serverInfo.name === 'api-book' && i.result.protocolVersion === '2025-06-18');
   p.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
-  const l = await rpc('tools/list'); t('tools/list', l.result.tools.length === 7, l.result.tools.map(x => x.name).join(','));
+  const l = await rpc('tools/list'); t('tools/list', l.result.tools.length === 9 && ['validate_manifest','get_catalog_status'].every(name => l.result.tools.some(t => t.name === name)), l.result.tools.map(x => x.name).join(','));
   let r = await call('search_apis', { query: 'route tls termination', limit: 3 }); t('search_apis', !r.err && r.out.results[0].kind === 'Route', r.out.results.map(x => x.kind).join(','));
   r = await call('search_apis', { query: '퍼시스턴트 볼륨', limit: 3 }); t('search_apis ko', !r.err && r.out.results.length > 0, r.out.results.map(x => x.kind).join(','));
   r = await call('get_api', { api: 'Route' }); t('get_api', !r.err && r.out.apiVersion === 'route.openshift.io/v1' && r.out.endpoints.length > 3, r.out.availability);
@@ -19,7 +19,48 @@ let fail = 0; const t = (name, c, info) => { console.log((c ? 'PASS ' : 'FAIL ')
   r = await call('get_fields', { api: 'Route' }); t('get_fields top', !r.err && r.out.fields.some(f => f.name === 'spec'));
   r = await call('get_constraints', { api: 'IngressController' }); t('get_constraints', !r.err && r.out.constraints.length > 0, JSON.stringify(r.out.counts));
   r = await call('compare_versions', { api: 'IngressController' }); t('compare_versions', !r.err && Array.isArray(r.out.fieldChanges));
+  r = await call('compare_versions', { api: 'config.openshift.io/Image', from: '4.22', to: '5.0' });
+  t('구조와 별개인 제약 문장 변경', !r.err && r.out.constraintChanges.some(c => c.path.includes('allowedRegistries') && c.to.some(x => x.includes('1024'))));
+  const reviews = [
+    { apiVersion: 'authentication.k8s.io/v1', kind: 'TokenReview', spec: { token: 'synthetic' } },
+    { apiVersion: 'authorization.k8s.io/v1', kind: 'SelfSubjectAccessReview', spec: { resourceAttributes: { verb: 'get', resource: 'pods' } } },
+    { apiVersion: 'v1', kind: 'ConfigMap' },
+  ];
+  r = await call('validate_manifest', { manifest: reviews.map(JSON.stringify).join('\n---\n'), version: '4.22' });
+  t('리뷰 요청과 일반 리소스의 metadata 규칙', !r.err && r.out.documents.map(d => d.valid).join(',') === 'true,true,false');
+  r = await call('generate_manifest', { api: 'authentication.k8s.io/TokenReview', version: '4.22' });
+  t('리뷰 요청 YAML 틀', !r.err && !r.out.yaml.includes('metadata:'));
+  const cron = JSON.stringify({ apiVersion: 'batch/v1', kind: 'CronJob', metadata: { name: 'example', namespace: 'default' } });
+  for (const [from, to] of [['4.22', '5.0'], ['5.0', '4.22']]) {
+    r = await call('validate_manifest', { from, to, manifest: cron + '\n---\nkind: &anchor X' });
+    const [job, malformed] = r.out.documents;
+    t('YAML 영향 ' + from + ' → ' + to, job.fromValid === (from === '4.22') && job.toValid === (to === '4.22') &&
+      job[from === '4.22' ? 'introduced' : 'resolved'].some(x => x.path === 'spec') && malformed.remaining.some(x => x.code === 'parse'));
+  }
   r = await call('list_apis', { book: 'network_apis', limit: 5 }); t('list_apis', !r.err && r.out.count > 5);
+  r = await call('compare_versions', { api: 'batch/CronJob', from: '4.22', to: '5.0' });
+  t('CronJob 필수 전환', !r.err && r.out.requiredChanges.some(c => c.path === 'spec' && c.from === 'optional' && c.to === 'required'));
+  r = await call('compare_versions', { api: 'batch/CronJob', from: '5.0', to: '4.22' });
+  t('역방향 필수 전환', !r.err && r.out.requiredChanges.some(c => c.path === 'spec' && c.to === 'optional'));
+  r = await call('compare_versions', { api: 'batch/CronJob', from: '5.0' });
+  t('불완전한 릴리스 쌍', r.err);
+  r = await call('get_catalog_status', { version: '5.0' });
+  t('수록 원본', !r.err && r.out.releases.length === 1 && /^[a-f0-9]{40}$/.test(r.out.releases[0].revision));
+  const bundle = [
+    { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'example' } },
+    'kind: &anchor ConfigMap',
+    { apiVersion: 'route.openshift.io/v1', kind: 'Route', metadata: { name: 'web' }, spec: { to: { kind: 'Service', name: 'web' }, tls: {} } },
+    { apiVersion: 'example.invalid/v1', kind: 'Ingress', metadata: { name: 'unsupported' } }
+  ].map(x => typeof x === 'string' ? x : JSON.stringify(x)).join('\n---\n');
+  r = await call('validate_manifest', { version: '4.22', manifest: bundle });
+  t('혼합 YAML 문서별 진단', !r.err && !r.out.valid && r.out.documents.length === 4 &&
+    r.out.documents[0].valid && r.out.documents[1].issues.some(i => i.code === 'parse') &&
+    r.out.documents[2].issues.some(i => i.path === 'spec.tls.termination') && !r.out.documents[3].valid);
+  const ingresses = ['networking.k8s.io/v1', 'config.openshift.io/v1'].map(apiVersion =>
+    ({ apiVersion, kind: 'Ingress', metadata: { name: 'example' } }));
+  r = await call('validate_manifest', { version: '5.0', manifest: JSON.stringify(ingresses) });
+  t('같은 Kind의 API 그룹 구분', !r.err && r.out.documents.every(d => d.id) &&
+    r.out.documents[0].id !== r.out.documents[1].id && r.out.documents[1].apiVersion === ingresses[1].apiVersion);
   r = await call('generate_manifest', { api: 'Route', name: 'web' }); t('generate_manifest', !r.err && /kind: Route/.test(r.out.yaml) && /name: web/.test(r.out.yaml), '\n' + r.out.yaml);
   r = await call('get_api', { api: 'NoSuchKind' }); t('unknown api -> isError', r.err === true);
   r = await call('get_fields', { api: 'Route', path: 'spec.nope' }); t('bad path -> isError', r.err === true);

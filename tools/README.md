@@ -19,9 +19,10 @@ API별 공식 페이지와 앵커는 `get_api.docUrl`에서 확인할 수 있습
 
 ```sh
 node mcp/smoke.js
+node --test tools/test-skill.js tools/test-skill-catalog.js
 node tools/cons-audit.js --strict
 ```
 
 새 제약 문장이 있으면 감사 결과에서 경로·원문과 유형을 대조한 뒤 기존 검토 기준선에 반영합니다. 새 릴리스는 출처 목록에 해당 버전의 개요 URL, 인덱스 URL, 브랜치를 추가하고 같은 명령으로 수집합니다.
 
-[정기 갱신 워크플로](../.github/workflows/refresh.yml)는 기본 브랜치에 반영되면 매주 월요일 09:20(KST)에 실행되며 Actions에서 수동으로도 시작할 수 있습니다. 변경이 있으면 카탈로그와 웹 캐시 파일을 다운로드 가능한 산출물로 남깁니다. 배포는 기존 Pages 절차를 따릅니다.
+[정기 갱신 워크플로](../.github/workflows/refresh.yml)는 기본 브랜치에 반영되면 매주 월요일 09:20(KST)에 실행되며 Actions에서 수동으로도 시작할 수 있습니다. 변경이 있으면 카탈로그와 웹 캐시 파일을 다운로드 가능한 산출물로 남깁니다. 주간 갱신은 검증을 통과한 생성물만 `automation/refresh-api-catalog` 브랜치의 PR 하나에 모읍니다. PR 표에서 기본 브랜치와 이번 수집의 원본 커밋을 비교할 수 있습니다. 기본 Actions 토큰은 읽기 전용입니다. 자동 PR을 사용하려면 이 저장소에만 Contents 및 Pull requests 쓰기 권한이 있는 전용 토큰을 저장소 Actions secret `CATALOG_PR_TOKEN`으로 등록합니다. 변경이 있는데 토큰이 없으면 산출물을 보존하고 실행 결과에 이유를 표시합니다. 배포는 해당 PR을 머지한 뒤 시작합니다. 같은 원본인지 로컬에서 확인하려면 `node tools/refresh/report.cjs`를 실행하세요.

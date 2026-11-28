@@ -20,7 +20,7 @@ const { publicFiles, isDataFile, canonicalBytes, loaderHash } = require('./tools
 // style-src 'unsafe-inline' 은 JS 가 만드는 style="" 속성 때문이다. 글꼴은 사용자 시스템 글꼴만 쓴다(웹 글꼴 없음). base-uri 'none' 은 <base> 주입으로 스크립트 경로를 바꾸는 공격 차단.
 // 환경변수/인자로 바꿀 수 없게 상수로 고정한다(약화 방지).
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN',
-  'Content-Security-Policy': `default-src 'self'; script-src 'self' '${loaderHash}'; style-src 'self' 'unsafe-inline'; font-src 'none'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
+  'Content-Security-Policy': `default-src 'self'; script-src 'self' '${loaderHash}'; style-src 'self' 'unsafe-inline'; font-src 'none'; img-src 'self' data:; connect-src 'self' https://api.github.com/repos/openshift/openshift-docs/commits/; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin' };
 
 const realpath = p => new Promise(ok => fs.realpath.native(p, (e, r) => ok(e ? null : r)));

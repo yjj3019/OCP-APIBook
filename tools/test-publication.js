@@ -48,7 +48,7 @@ test('Windows and Git checkouts produce identical deployable bytes', t => {
   const win = {};
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'data/merged.js'), 'utf8'), { window: win });
   const latest = 'data/' + win.MERGED.default;
-  const files = [...publicFiles, 'data/merged.js', 'data/legacy.js', latest + '.js', latest + '.fidx.js', latest + '.fields.network_apis.js'];
+  const files = [...publicFiles, 'data/merged.js', 'data/legacy.js', 'data/versions.js', latest + '.js', latest + '.fidx.js', latest + '.fields.network_apis.js'];
   function stamp(eol) {
     for (const name of files) {
       const src = fs.readFileSync(path.join(repo, name), 'utf8').replace(/\r?\n/g, eol);
@@ -70,6 +70,22 @@ test('Windows and Git checkouts produce identical deployable bytes', t => {
     if (file === 'data/merged.js' || file === 'data/legacy.js') {
       assert.ok(lf[0].includes(`src="${file}?v=${digest.toString('base64url')}" integrity="sha256-${hashes[file]}"`));
     }
+  }
+});
+
+test('locale formatting preserves user values and orders translated arguments', () => {
+  const source = fs.readFileSync(path.join(repo, 'locale.js'), 'utf8');
+  const locale = lang => {
+    const ctx = { window: {}, location: { search: lang ? '?lang=' + lang : '' }, URLSearchParams };
+    vm.runInNewContext(source, ctx);
+    return ctx.window.ApiBookLocale;
+  };
+  const input = '검색 <name> {1} $&';
+  const label = (ui, value) => ui`<b>${value}</b>문서 ${5}개 중 ${3}개를 편집 탭에 열었습니다.`;
+  assert.equal(label(locale('en').text, input), '<b>' + input + '</b>Opened 3 of 5 documents in the editor.');
+  for (const lang of ['', 'ko', 'unknown']) {
+    assert.equal(locale(lang).language, 'ko');
+    assert.equal(label(locale(lang).text, input), '<b>' + input + '</b>문서 5개 중 3개를 편집 탭에 열었습니다.');
   }
 });
 

@@ -2,6 +2,7 @@
 /* API 설계 시뮬레이터: 스펙 기반 폼 → YAML → 스키마 검증 → 요청/응답 시뮬레이션 */
 (function (root) {
   'use strict';
+  const ui = (typeof module !== 'undefined' && module.exports ? require('./locale') : root.ApiBookLocale).text;
   const endpoints = typeof module !== 'undefined' && module.exports ? require('./endpoints') : root.ApiEndpoints;
   const LSKEY = 'apibook.sim.';
   const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -11,7 +12,7 @@
   const MAX_INPUT = 1 << 20, MAX_DEPTH = 64;                      // 입력 1MB, 중첩 64단계 상한
   const DANGEROUS = new Set(['__proto__', 'constructor', 'prototype']);
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
-  const UNSUP = '지원하지 않는 YAML 문법: ';
+  const UNSUP = ui('지원하지 않는 YAML 문법: ');
   const clip = s => s.length > 40 ? s.slice(0, 40) + '…' : s;
   const BLOCK_RE = /^[|>](?:[1-9][-+]?|[-+][1-9]?)?$/;
   /* i 위치가 스칼라의 시작인지: 줄 처음, ': '/'- '/'? ' 뒤, 흐름식([ { ,) 안의 항목 처음. 평문 중간의 따옴표는 따옴표가 아님 */
@@ -36,7 +37,7 @@
   }
   /* 2^53 을 넘는 정수는 정밀도가 깨지므로 문자열로 유지하고 경고(WARN 은 yamlParse 호출 동안만 설정) */
   let WARN = null;
-  const bigWarn = s => { if (WARN && WARN.length < 20) WARN.push(`정수 ${clip(s)} 는 2^53 을 넘어 정밀도가 손실되므로 문자열로 유지했습니다`); };
+  const bigWarn = s => { if (WARN && WARN.length < 20) WARN.push(ui`정수 ${clip(s)} 는 2^53 을 넘어 정밀도가 손실되므로 문자열로 유지했습니다`); };
   const NUM_RE = /-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/y;
   /* JSON 텍스트에서 문자열 밖의 큰 정수 토큰을 따옴표로 감쌈(JSON.parse 전에) */
   function bigQuote(t) {
@@ -65,30 +66,30 @@
   function scalar(s, depth) {
     s = s.trim();
     if (s === '' || s === '~' || /^null$/i.test(s)) return null;
-    if (s[0] === '"') { try { return JSON.parse(s); } catch (e) { throw new Error('따옴표가 올바르지 않습니다: ' + clip(s)); } }
-    if (s[0] === "'") { if (s.length < 2 || s[s.length - 1] !== "'") throw new Error('따옴표가 닫히지 않았습니다: ' + clip(s)); return s.slice(1, -1).replace(/''/g, "'"); }
-    if (s[0] === '&' || s[0] === '*') throw new Error(UNSUP + (s[0] === '&' ? '앵커(&)' : '별칭(*)') + ' — 값을 직접 풀어서 써 주세요: ' + clip(s));
-    if (s[0] === '!') throw new Error(UNSUP + '태그(!)' + ': ' + clip(s));
+    if (s[0] === '"') { try { return JSON.parse(s); } catch (e) { throw new Error(ui('따옴표가 올바르지 않습니다: ') + clip(s)); } }
+    if (s[0] === "'") { if (s.length < 2 || s[s.length - 1] !== "'") throw new Error(ui('따옴표가 닫히지 않았습니다: ') + clip(s)); return s.slice(1, -1).replace(/''/g, "'"); }
+    if (s[0] === '&' || s[0] === '*') throw new Error(UNSUP + (s[0] === '&' ? ui('앵커(&)') : ui('별칭(*)')) + ui(' — 값을 직접 풀어서 써 주세요: ') + clip(s));
+    if (s[0] === '!') throw new Error(UNSUP + ui('태그(!)') + ': ' + clip(s));
     if (s[0] === '[' || s[0] === '{') return flow(s, depth || 0);
     if (/^(true|false)$/i.test(s)) return s.toLowerCase() === 'true';
     if (/^[-+]?\d+$/.test(s)) { const n = parseInt(s, 10); if (Number.isSafeInteger(n)) return n; bigWarn(s); return s; }
-    if (/^[-+]?\.(inf|Inf|INF)$/.test(s) || /^\.(nan|NaN|NAN)$/.test(s)) { if (WARN && WARN.length < 20) WARN.push(`${s} 는 JSON 으로 표현할 수 없어 API 서버로 보낼 수 없습니다`); return /n/i.test(s[1]) ? NaN : s[0] === '-' ? -Infinity : Infinity; }
+    if (/^[-+]?\.(inf|Inf|INF)$/.test(s) || /^\.(nan|NaN|NAN)$/.test(s)) { if (WARN && WARN.length < 20) WARN.push(ui`${s} 는 JSON 으로 표현할 수 없어 API 서버로 보낼 수 없습니다`); return /n/i.test(s[1]) ? NaN : s[0] === '-' ? -Infinity : Infinity; }
     if (/^[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$/.test(s)) return parseFloat(s);
     return s;
   }
   function flow(s, depth) {
-    if (depth >= MAX_DEPTH) throw new Error('중첩이 너무 깊습니다 (최대 ' + MAX_DEPTH + '단계)');
+    if (depth >= MAX_DEPTH) throw new Error(ui('중첩이 너무 깊습니다 (최대 ') + MAX_DEPTH + ui('단계)'));
     s = s.trim();
     if (s[0] === '[') {
-      if (s[s.length - 1] !== ']') throw new Error(UNSUP + '여러 줄에 걸친 흐름식 [ ] 은 한 줄로 쓰거나 블록 형식으로 바꿔 주세요: ' + clip(s));
+      if (s[s.length - 1] !== ']') throw new Error(UNSUP + ui('여러 줄에 걸친 흐름식 [ ] 은 한 줄로 쓰거나 블록 형식으로 바꿔 주세요: ') + clip(s));
       return splitTop(s.slice(1, -1)).map(x => scalar(x, depth + 1));
     }
-    if (s[s.length - 1] !== '}') throw new Error(UNSUP + '여러 줄에 걸친 흐름식 { } 은 한 줄로 쓰거나 블록 형식으로 바꿔 주세요: ' + clip(s));
+    if (s[s.length - 1] !== '}') throw new Error(UNSUP + ui('여러 줄에 걸친 흐름식 { } 은 한 줄로 쓰거나 블록 형식으로 바꿔 주세요: ') + clip(s));
     const o = {};
     for (const part of splitTop(s.slice(1, -1))) {
-      const ks = keySplit(part.trim()); if (!ks) throw new Error("'key: value' 형식이 아닙니다: " + clip(part));
-      if (DANGEROUS.has(ks[0])) throw new Error(`허용되지 않는 키 "${ks[0]}"`);
-      if (hasOwn(o, ks[0])) throw new Error(`중복된 키 "${ks[0]}"`);
+      const ks = keySplit(part.trim()); if (!ks) throw new Error(ui("'key: value' 형식이 아닙니다: ") + clip(part));
+      if (DANGEROUS.has(ks[0])) throw new Error(ui`허용되지 않는 키 "${ks[0]}"`);
+      if (hasOwn(o, ks[0])) throw new Error(ui`중복된 키 "${ks[0]}"`);
       o[ks[0]] = ks[1] === '' ? null : scalar(ks[1], depth + 1);
     }
     return o;
@@ -99,23 +100,23 @@
     if (t[0] === '"' || t[0] === "'") {
       const q = t[0]; let j = 1; for (; j < t.length; j++) { if (t[j] === '\\' && q === '"') j++; else if (t[j] === q) break; }
       if (j >= t.length || (t[j + 1] !== ':' || (t[j + 2] !== undefined && t[j + 2] !== ' '))) return null;
-      try { key = q === '"' ? JSON.parse(t.slice(0, j + 1)) : t.slice(1, j).replace(/''/g, "'"); } catch (e) { throw new Error('따옴표가 올바르지 않습니다: ' + clip(t)); }
+      try { key = q === '"' ? JSON.parse(t.slice(0, j + 1)) : t.slice(1, j).replace(/''/g, "'"); } catch (e) { throw new Error(ui('따옴표가 올바르지 않습니다: ') + clip(t)); }
       rest = t.slice(j + 2).trim();
     } else {
       const m = t.match(/^([^]*?):(?:\s+([^]*))?$/); if (!m) return null;
       key = m[1].trim(); rest = (m[2] || '').trim();
       if (key.includes(' #') || key === '') return null;
-      if (key[0] === '&' || key[0] === '*' || key[0] === '!') throw new Error(UNSUP + '앵커/별칭/태그: ' + clip(t));
+      if (key[0] === '&' || key[0] === '*' || key[0] === '!') throw new Error(UNSUP + ui('앵커/별칭/태그: ') + clip(t));
     }
     return [key, rest];
   }
   const isSeq = t => t === '-' || t.startsWith('- ');
   function parseDoc(rawLines, start) {
     const L = [];
-    const wrap = (n, fn) => { try { return fn(); } catch (e) { if (e instanceof RangeError || e instanceof TypeError || /^줄 \d+:/.test(e.message)) throw e; throw new Error(`줄 ${n}: ${e.message}`); } };
+    const wrap = (n, fn) => { try { return fn(); } catch (e) { if (e instanceof RangeError || e instanceof TypeError || /^줄 \d+:/.test(e.message)) throw e; throw new Error(ui`줄 ${n}: ${e.message}`); } };
     rawLines.forEach((line, idx) => {
       const n = start + idx + 1;
-      if (line.trim() !== '' && /^\t/.test(line)) throw new Error(`줄 ${n}: 탭 대신 공백으로 들여써 주세요`);
+      if (line.trim() !== '' && /^\t/.test(line)) throw new Error(ui`줄 ${n}: 탭 대신 공백으로 들여써 주세요`);
       const t = stripComment(line), ind = /^ */.exec(line)[0].length;
       if (!t.trim()) { L.push({ blank: true, comment: line.trim() !== '', indent: ind, raw: line, n }); return; }
       const m = /^( *)([^]*)$/.exec(t); L.push({ indent: m[1].length, text: m[2].trimEnd(), raw: line, n });
@@ -124,7 +125,7 @@
     const skip = () => { while (i < L.length && L[i].blank) i++; };
     const KS = ln => wrap(ln.n, () => keySplit(ln.text));
     function block(head, indent, ln0) {
-      if (/[1-9]/.test(head)) throw new Error(`줄 ${ln0.n}: ${UNSUP}블록 들여쓰기 표시자(${head})`);
+      if (/[1-9]/.test(head)) throw new Error(ui`줄 ${ln0.n}: ${UNSUP}블록 들여쓰기 표시자(${head})`);
       const raw = []; let ci = -1;                                        // 공백만 있는 줄은 {ws: 원문} 으로 보관(들여쓰기 확정 후 처리)
       while (i < L.length) {
         const ln = L[i];
@@ -158,17 +159,17 @@
       i++; return wrap(ln.n, () => scalar(ln.text, 0));
     }
     function map(indent, dep) {
-      if (dep > MAX_DEPTH) throw new Error(`줄 ${L[i].n}: 중첩이 너무 깊습니다 (최대 ${MAX_DEPTH}단계)`);
+      if (dep > MAX_DEPTH) throw new Error(ui`줄 ${L[i].n}: 중첩이 너무 깊습니다 (최대 ${MAX_DEPTH}단계)`);
       const o = {}; let prevPlain = false;
       for (;;) {
         skip(); if (i >= L.length) break; const ln = L[i];
         if (ln.indent < indent) break;
-        if (ln.indent > indent) throw new Error(prevPlain ? `줄 ${ln.n}: 여러 줄 평문 스칼라는 지원하지 않습니다. 값을 한 줄로 쓰거나 "|"(줄 유지) 또는 ">"(줄 접기) 블록 스칼라를 쓰세요` : `줄 ${ln.n}: 들여쓰기가 맞지 않습니다`);
+        if (ln.indent > indent) throw new Error(prevPlain ? ui`줄 ${ln.n}: 여러 줄 평문 스칼라는 지원하지 않습니다. 값을 한 줄로 쓰거나 "|"(줄 유지) 또는 ">"(줄 접기) 블록 스칼라를 쓰세요` : ui`줄 ${ln.n}: 들여쓰기가 맞지 않습니다`);
         if (isSeq(ln.text)) break;
-        const ks = KS(ln); if (!ks) throw new Error(`줄 ${ln.n}: 'key: value' 형식이 아닙니다 → ${clip(ln.text)}`);
+        const ks = KS(ln); if (!ks) throw new Error(ui`줄 ${ln.n}: 'key: value' 형식이 아닙니다 → ${clip(ln.text)}`);
         const [k, rest] = ks; i++;
-        if (DANGEROUS.has(k)) throw new Error(`줄 ${ln.n}: 허용되지 않는 키 "${k}"`);
-        if (hasOwn(o, k)) throw new Error(`줄 ${ln.n}: 중복된 키 "${k}"`);
+        if (DANGEROUS.has(k)) throw new Error(ui`줄 ${ln.n}: 허용되지 않는 키 "${k}"`);
+        if (hasOwn(o, k)) throw new Error(ui`줄 ${ln.n}: 중복된 키 "${k}"`);
         if (rest === '') { skip(); const nx = L[i]; o[k] = nx && (nx.indent > indent || (nx.indent === indent && isSeq(nx.text))) ? node(nx.indent, dep + 1) : null; }
         else if (BLOCK_RE.test(rest)) o[k] = block(rest, indent, ln);
         else o[k] = wrap(ln.n, () => scalar(rest, 0));
@@ -177,7 +178,7 @@
       return o;
     }
     function seq(indent, dep) {
-      if (dep > MAX_DEPTH) throw new Error(`줄 ${L[i].n}: 중첩이 너무 깊습니다 (최대 ${MAX_DEPTH}단계)`);
+      if (dep > MAX_DEPTH) throw new Error(ui`줄 ${L[i].n}: 중첩이 너무 깊습니다 (최대 ${MAX_DEPTH}단계)`);
       const a = [];
       for (;;) {
         skip(); if (i >= L.length) break; const ln = L[i];
@@ -192,7 +193,7 @@
       return a;
     }
     const v = node(0, 0); skip();
-    if (i < L.length) throw new Error(`줄 ${L[i].n}: 해석할 수 없는 내용입니다 → ${clip(L[i].text || L[i].raw)}`);
+    if (i < L.length) throw new Error(ui`줄 ${L[i].n}: 해석할 수 없는 내용입니다 → ${clip(L[i].text || L[i].raw)}`);
     return v;
   }
   /* 파싱된 JSON 에 위험 키/과도한 중첩이 없는지 확인 */
@@ -204,36 +205,36 @@
   }
   /* 문서 목록을 돌려줌(--- 로 나뉜 여러 문서, 최상위 JSON 배열은 문서 여러 개). warns 배열을 주면 경고(큰 정수 등)를 넣어 줌 */
   function yamlParse(text, warns) {
-    if (typeof text !== 'string') throw new Error('문자열이 아닙니다');
-    if (text.length > MAX_INPUT) throw new Error(`입력이 너무 큽니다 (최대 ${MAX_INPUT >> 20}MB)`);
+    if (typeof text !== 'string') throw new Error(ui('문자열이 아닙니다'));
+    if (text.length > MAX_INPUT) throw new Error(ui`입력이 너무 큽니다 (최대 ${MAX_INPUT >> 20}MB)`);
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);              // UTF-8 BOM
     const prevW = WARN; WARN = Array.isArray(warns) ? warns : null;
     try { return yamlParseInner(text); }
     catch (e) {
-      if (e instanceof RangeError) throw new Error('중첩이 너무 깊어 해석할 수 없습니다 (최대 ' + MAX_DEPTH + '단계)');
-      if (e instanceof TypeError || e instanceof SyntaxError) throw new Error('YAML을 해석할 수 없습니다 (' + e.message + ')');
+      if (e instanceof RangeError) throw new Error(ui('중첩이 너무 깊어 해석할 수 없습니다 (최대 ') + MAX_DEPTH + ui('단계)'));
+      if (e instanceof TypeError || e instanceof SyntaxError) throw new Error(ui('YAML을 해석할 수 없습니다 (') + e.message + ')');
       throw e;
     } finally { WARN = prevW; }
   }
   /* 값 하나를 해석(자유 형식 입력용): JSON 우선, 아니면 단일 YAML 문서. 배열은 배열 그대로. 빈 입력은 undefined */
   function parseValue(text, warns) {
-    if (typeof text !== 'string') throw new Error('문자열이 아닙니다');
+    if (typeof text !== 'string') throw new Error(ui('문자열이 아닙니다'));
     const t = text.replace(/^﻿/, '').trim(); if (t === '') return undefined;
-    if (t.length > MAX_INPUT) throw new Error(`입력이 너무 큽니다 (최대 ${MAX_INPUT >> 20}MB)`);
+    if (t.length > MAX_INPUT) throw new Error(ui`입력이 너무 큽니다 (최대 ${MAX_INPUT >> 20}MB)`);
     const prevW = WARN; WARN = Array.isArray(warns) ? warns : null;
     let j, ok = false;
     const wn = WARN ? WARN.length : 0;
     try { j = JSON.parse(bigQuote(t)); ok = true; } catch (e) { if (WARN) WARN.length = wn; /* YAML 로 시도 */ } finally { WARN = prevW; }
-    if (ok) { if (!treeOK(j, 0)) throw new Error('허용되지 않는 키(__proto__ 등)가 있거나 중첩이 너무 깊습니다'); return j; }
+    if (ok) { if (!treeOK(j, 0)) throw new Error(ui('허용되지 않는 키(__proto__ 등)가 있거나 중첩이 너무 깊습니다')); return j; }
     const docs = yamlParse(t, warns);
-    if (docs.length > 1) throw new Error('문서(---)가 여러 개입니다. 값 하나만 입력하세요');
+    if (docs.length > 1) throw new Error(ui('문서(---)가 여러 개입니다. 값 하나만 입력하세요'));
     return docs.length ? docs[0] : null;
   }
   function yamlParseInner(text) {
     const t = text.trim();
     if (t[0] === '{' && /\}\s*$/.test(t) || t[0] === '[' && /\]\s*$/.test(t)) {
       let j, ok = false; const wn = WARN ? WARN.length : 0; try { j = JSON.parse(bigQuote(t)); ok = true; } catch (e) { if (WARN) WARN.length = wn; /* YAML 흐름식일 수 있음 */ }
-      if (ok) { if (!treeOK(j, 0)) throw new Error('허용되지 않는 키(__proto__ 등)가 있거나 중첩이 너무 깊습니다'); return Array.isArray(j) ? j : [j]; }
+      if (ok) { if (!treeOK(j, 0)) throw new Error(ui('허용되지 않는 키(__proto__ 등)가 있거나 중첩이 너무 깊습니다')); return Array.isArray(j) ? j : [j]; }
     }
     const docs = []; let cur = [], st = 0;
     const cut = idx => { if (cur.some(l => l.trim())) docs.push({ lines: cur, st }); cur = []; st = idx + 1; };
@@ -283,13 +284,22 @@
   const SUBT = { time: 'time', microtime: 'time', metatime: 'time', duration: 'time', date: 'time', datetime: 'time', quantity: 'quantity', intorstring: 'intorstring', integerorstring: 'intorstring' };
   const subOf = t => { const n = normT(t); return SUBT[n] || (/^k8s\.io\//.test(n) ? 'time' : ''); };
   const META = [
-    { name: 'name', type: 'string', desc: '리소스 이름. 소문자·숫자·"-"·"."만 사용하고 네임스페이스 안에서 유일해야 합니다.', required: true, kind: 'scalar', st: 'string' },
-    { name: 'namespace', type: 'string', desc: '리소스가 속한 네임스페이스.', required: false, kind: 'scalar', st: 'string' },
-    { name: 'generateName', type: 'string', desc: 'name을 비워 두면 이 접두사 뒤에 임의 문자열을 붙여 서버가 이름을 만듭니다.', required: false, kind: 'scalar', st: 'string' },
-    { name: 'labels', type: 'object (string)', desc: '리소스를 선택·분류하는 키-값 쌍.', required: false, kind: 'map', st: 'string' },
-    { name: 'annotations', type: 'object (string)', desc: '도구와 사람이 참고하는 부가 정보(선택에 쓰이지 않음).', required: false, kind: 'map', st: 'string' },
-    { name: 'finalizers', type: 'array (string)', desc: '삭제 전에 정리 작업이 끝날 때까지 삭제를 막는 식별자 목록.', required: false, kind: 'array-scalar', st: 'string' },
+    { name: 'name', type: 'string', desc: ui('리소스 이름. 소문자·숫자·"-"·"."만 사용하고 네임스페이스 안에서 유일해야 합니다.'), required: true, kind: 'scalar', st: 'string' },
+    { name: 'namespace', type: 'string', desc: ui('리소스가 속한 네임스페이스.'), required: false, kind: 'scalar', st: 'string' },
+    { name: 'generateName', type: 'string', desc: ui('name을 비워 두면 이 접두사 뒤에 임의 문자열을 붙여 서버가 이름을 만듭니다.'), required: false, kind: 'scalar', st: 'string' },
+    { name: 'labels', type: 'object (string)', desc: ui('리소스를 선택·분류하는 키-값 쌍.'), required: false, kind: 'map', st: 'string' },
+    { name: 'annotations', type: 'object (string)', desc: ui('도구와 사람이 참고하는 부가 정보(선택에 쓰이지 않음).'), required: false, kind: 'map', st: 'string' },
+    { name: 'finalizers', type: 'array (string)', desc: ui('삭제 전에 정리 작업이 끝날 때까지 삭제를 막는 식별자 목록.'), required: false, kind: 'array-scalar', st: 'string' },
   ];
+  const reviewKinds = new Map([
+    ['authorization.k8s.io', ['SelfSubjectAccessReview', 'LocalSubjectAccessReview', 'SubjectAccessReview', 'SelfSubjectRulesReview']],
+    ['authentication.k8s.io', ['TokenReview', 'SelfSubjectReview']],
+    ['security.openshift.io', ['PodSecurityPolicyReview', 'PodSecurityPolicySelfSubjectReview', 'PodSecurityPolicySubjectReview']],
+    ['authorization.openshift.io', ['LocalResourceAccessReview', 'LocalSubjectAccessReview', 'ResourceAccessReview', 'SubjectAccessReview', 'SelfSubjectRulesReview', 'SubjectRulesReview']],
+  ]);
+  function needsName(a) {
+    return !reviewKinds.get(a.group)?.includes(a.kind) || !!a.d.required?.includes('metadata');
+  }
   function makeSchema(a, F) {
     const byPath = new Map((F || []).map(f => [f.p, f]));
     const cache = new Map();
@@ -321,7 +331,7 @@
         if (DANGEROUS.has(nm.replace(BASE_RE, ''))) continue;
         if (BAD(nm) && rows.some(x => x[0] === nm.replace(BASE_RE, ''))) continue;
         if (p === '' && ['apiVersion', 'kind'].includes(nm)) continue;
-        if (p === '' && nm === 'metadata') { out.push({ name: 'metadata', type: 'ObjectMeta', desc: r[2], required: true, kind: 'meta' }); continue; }
+        if (p === '' && nm === 'metadata') { out.push({ name: 'metadata', type: 'ObjectMeta', desc: r[2], required: needsName(a), kind: 'meta' }); continue; }
         out.push(classify(p, nm.replace(BASE_RE, ''), r[1], r[2], rq.has(nm)));
       }
       cache.set(p, out); return out;
@@ -449,43 +459,46 @@
   function nameError(kind, n) {
     if (PATHSEG_KINDS.has(kind)) {                                       // RBAC: 경로 세그먼트 규칙만(system:aggregate-to-admin 같은 이름 허용)
       const bad = n === '.' ? "may not be '.'" : n === '..' ? "may not be '..'" : n.includes('/') ? "may not contain '/'" : n.includes('%') ? "may not contain '%'" : '';
-      return bad ? { ko: '이름 형식 오류: "."·".."은 쓸 수 없고 "/"·"%"를 포함할 수 없습니다', en: bad } : null;
+      return bad ? { ko: ui('이름 형식 오류: "."·".."은 쓸 수 없고 "/"·"%"를 포함할 수 없습니다'), en: bad } : null;
     }
     const svc = kind === 'Service', lbl = svc || LABEL_KINDS.has(kind), max = lbl ? 63 : 253;
-    if (n.length > max) return { ko: `이름이 너무 깁니다: ${max}자 이하여야 합니다 (현재 ${n.length}자)`, en: `must be no more than ${max} characters` };
+    if (n.length > max) return { ko: ui`이름이 너무 깁니다: ${max}자 이하여야 합니다 (현재 ${n.length}자)`, en: `must be no more than ${max} characters` };
     if (svc ? DNS1035.test(n) : lbl ? DNS_LABEL.test(n) : DNS.test(n)) return null;
-    if (svc) return { ko: '이름 형식 오류(DNS-1035 레이블): 소문자·숫자·"-"만 가능하고 영소문자로 시작, 영숫자로 끝나야 하며 63자 이하여야 합니다', en: "a DNS-1035 label must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character" };
-    if (lbl) return { ko: '이름 형식 오류(DNS-1123 레이블): 소문자·숫자·"-"만 가능하고 영숫자로 시작·끝나야 하며 63자 이하여야 합니다', en: "a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character" };
-    return { ko: '이름 형식 오류(DNS-1123 서브도메인): 소문자·숫자·"-"·"."만 가능하고 영숫자로 시작·끝나야 하며 253자 이하여야 합니다', en: "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" };
+    if (svc) return { ko: ui('이름 형식 오류(DNS-1035 레이블): 소문자·숫자·"-"만 가능하고 영소문자로 시작, 영숫자로 끝나야 하며 63자 이하여야 합니다'), en: "a DNS-1035 label must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character" };
+    if (lbl) return { ko: ui('이름 형식 오류(DNS-1123 레이블): 소문자·숫자·"-"만 가능하고 영숫자로 시작·끝나야 하며 63자 이하여야 합니다'), en: "a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character" };
+    return { ko: ui('이름 형식 오류(DNS-1123 서브도메인): 소문자·숫자·"-"·"."만 가능하고 영숫자로 시작·끝나야 하며 253자 이하여야 합니다'), en: "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character" };
   }
   const empty = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
   function validate(M, a, d, sch) {
     const issues = [];
     const add = (level, p, msg, code, x) => issues.push(Object.assign({ level, path: pstr(p), msg, code }, code === 'unknown' ? { segments: p } : {}, x));
-    if (M.apiVersion !== d.gv) add('error', ['apiVersion'], `apiVersion은 "${d.gv}" 이어야 합니다 (현재: ${JSON.stringify(M.apiVersion)})`, 'mismatch');
-    if (M.kind !== a.kind) add('error', ['kind'], `kind는 "${a.kind}" 이어야 합니다 (현재: ${JSON.stringify(M.kind)})`, 'mismatch');
+    if (M.apiVersion !== d.gv) add('error', ['apiVersion'], ui`apiVersion은 "${d.gv}" 이어야 합니다 (현재: ${JSON.stringify(M.apiVersion)})`, 'mismatch');
+    if (M.kind !== a.kind) add('error', ['kind'], ui`kind는 "${a.kind}" 이어야 합니다 (현재: ${JSON.stringify(M.kind)})`, 'mismatch');
     const md = M.metadata;
-    if (!isObj(md)) add('error', ['metadata'], '필수 값 없음', 'required');
+    if (!isObj(md)) {
+      if (md !== undefined) add('error', ['metadata'], ui('객체여야 합니다'), 'type');
+      else if (needsName(a)) add('error', ['metadata'], ui('필수 값 없음'), 'required');
+    }
     else {
-      if (md.name != null && typeof md.name !== 'string') add('error', ['metadata', 'name'], '문자열이어야 합니다', 'type');
-      if (empty(md.name) && empty(md.generateName)) add('error', ['metadata', 'name'], '필수 값 없음: name 또는 generateName 중 하나가 필요합니다', 'required');
+      if (md.name != null && typeof md.name !== 'string') add('error', ['metadata', 'name'], ui('문자열이어야 합니다'), 'type');
+      if (needsName(a) && empty(md.name) && empty(md.generateName)) add('error', ['metadata', 'name'], ui('필수 값 없음: name 또는 generateName 중 하나가 필요합니다'), 'required');
       else if (typeof md.name === 'string' && md.name) {
         const ne = nameError(a.kind, md.name);
         if (ne) add('error', ['metadata', 'name'], ne.ko, 'invalid', { val: md.name, rule: ne.en });
       }
-      if (d.ns && empty(md.namespace)) add('warn', ['metadata', 'namespace'], '네임스페이스 범위 리소스입니다. 비워 두면 현재 프로젝트(네임스페이스)에 만들어집니다', 'hint');
-      if (!d.ns && !empty(md.namespace)) add('warn', ['metadata', 'namespace'], '클러스터 범위 리소스라 namespace는 무시됩니다', 'hint');
+      if (d.ns && empty(md.namespace)) add('warn', ['metadata', 'namespace'], ui('네임스페이스 범위 리소스입니다. 비워 두면 현재 프로젝트(네임스페이스)에 만들어집니다'), 'hint');
+      if (!d.ns && !empty(md.namespace)) add('warn', ['metadata', 'namespace'], ui('클러스터 범위 리소스라 namespace는 무시됩니다'), 'hint');
       for (const field of ['namespace', 'generateName']) {
-        if (md[field] != null && typeof md[field] !== 'string') add('error', ['metadata', field], '문자열이어야 합니다', 'type');
+        if (md[field] != null && typeof md[field] !== 'string') add('error', ['metadata', field], ui('문자열이어야 합니다'), 'type');
       }
       for (const field of ['labels', 'annotations']) {
         if (md[field] == null) continue;
-        if (!isObj(md[field])) add('error', ['metadata', field], '문자열 값을 가진 맵이어야 합니다', 'type');
-        else for (const [k, v] of Object.entries(md[field])) if (typeof v !== 'string') add('error', ['metadata', field, k], '문자열이어야 합니다', 'type');
+        if (!isObj(md[field])) add('error', ['metadata', field], ui('문자열 값을 가진 맵이어야 합니다'), 'type');
+        else for (const [k, v] of Object.entries(md[field])) if (typeof v !== 'string') add('error', ['metadata', field, k], ui('문자열이어야 합니다'), 'type');
       }
-      if (md.finalizers != null && (!Array.isArray(md.finalizers) || md.finalizers.some(x => typeof x !== 'string'))) add('error', ['metadata', 'finalizers'], '문자열 배열이어야 합니다', 'type');
-      if (!empty(md.namespace) && typeof md.namespace === 'string' && (md.namespace.length > 63 || !DNS_LABEL.test(md.namespace))) add('error', ['metadata', 'namespace'], '네임스페이스 형식 오류: 소문자·숫자·"-"만, 63자 이하', 'invalid');
-      for (const k of Object.keys(md)) if (!META.some(m => m.name === k) && !['uid', 'resourceVersion', 'generation', 'creationTimestamp', 'ownerReferences', 'managedFields', 'deletionTimestamp', 'selfLink'].includes(k)) add('warn', ['metadata', k], `알 수 없는 필드 "${k}"`, 'unknown');
+      if (md.finalizers != null && (!Array.isArray(md.finalizers) || md.finalizers.some(x => typeof x !== 'string'))) add('error', ['metadata', 'finalizers'], ui('문자열 배열이어야 합니다'), 'type');
+      if (!empty(md.namespace) && typeof md.namespace === 'string' && (md.namespace.length > 63 || !DNS_LABEL.test(md.namespace))) add('error', ['metadata', 'namespace'], ui('네임스페이스 형식 오류: 소문자·숫자·"-"만, 63자 이하'), 'invalid');
+      for (const k of Object.keys(md)) if (!META.some(m => m.name === k) && !['uid', 'resourceVersion', 'generation', 'creationTimestamp', 'ownerReferences', 'managedFields', 'deletionTimestamp', 'selfLink'].includes(k)) add('warn', ['metadata', k], ui`알 수 없는 필드 "${k}"`, 'unknown');
     }
     const typeOK = (st, v) => {
       if (/^string$/i.test(st)) return typeof v === 'string';
@@ -500,32 +513,32 @@
       if (!isObj(val)) return;
       const kids = sch.children(sp), names = new Set(kids.map(k => k.name));
       if (sp === '') ['apiVersion', 'kind', 'metadata'].forEach(n => names.add(n));
-      for (const k of Object.keys(val)) if (!names.has(k) && !(sp === '' && k === 'status')) add('warn', vp.concat(k), `스펙에 없는 필드 "${k}"${nearest(k, [...names]) ? ` — 혹시 "${nearest(k, [...names])}"?` : ''}`, 'unknown');
+      for (const k of Object.keys(val)) if (!names.has(k) && !(sp === '' && k === 'status')) add('warn', vp.concat(k), ui`스펙에 없는 필드 "${k}"${nearest(k, [...names]) ? ui` — 혹시 "${nearest(k, [...names])}"?` : ''}`, 'unknown');
       for (const kid of kids) {
         if (kid.kind === 'meta') continue;
         const p = vp.concat(kid.name), v = val[kid.name], present = v !== undefined;
         if (kid.required && (!present || v === null || empty(v) && kid.kind !== 'object' && kid.kind !== 'map-object' && kid.kind !== 'any' && !(kid.kind === 'scalar' && kid.st === 'boolean' && typeof v === 'boolean') && !(kid.name === 'apiGroup' && v === ''))) {
-          add('error', p, '필수 값 없음', 'required'); if (!present) continue;
+          add('error', p, ui('필수 값 없음'), 'required'); if (!present) continue;
         }
         if (!present) continue;
-        if (v === null) { if (kid.required) continue; add('warn', p, '값이 비어 있습니다(null)', 'hint'); continue; }
+        if (v === null) { if (kid.required) continue; add('warn', p, ui('값이 비어 있습니다(null)'), 'hint'); continue; }
         const en = kid.kind === 'scalar' && typeof v === 'string' ? enumOf(kid.desc) : null;
         if (kid.kind === 'scalar') {
-          if (kid.sub === 'intorstring') { if (typeof v !== 'string' && typeof v !== 'number') add('error', p, '숫자 또는 문자열이어야 합니다', 'type'); }
-          else if (kid.sub === 'quantity') { if (typeof v !== 'string' && typeof v !== 'number') add('error', p, '수량은 문자열(예: "100m")이어야 합니다', 'type'); }
-          else if (!typeOK(kid.st, v)) add('error', p, `${kid.st === 'string' ? '문자열' : kid.st === 'boolean' ? '불리언(true/false)' : kid.st === 'integer' ? '정수' : '숫자'}여야 합니다 (현재: ${tname(v)})`, 'type', { exp: kid.st, act: tname(v) });
-          else if (en && v !== '' && !en.includes(v)) add('warn', p, `설명에 나온 값(${en.join(', ')})이 아닙니다`, 'enum');
-        } else if (kid.kind === 'object') { if (!isObj(v)) add('error', p, `객체여야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'object', act: tname(v) }); else walk(v, kid.cpath, p, depth + 1); }
+          if (kid.sub === 'intorstring') { if (typeof v !== 'string' && typeof v !== 'number') add('error', p, ui('숫자 또는 문자열이어야 합니다'), 'type'); }
+          else if (kid.sub === 'quantity') { if (typeof v !== 'string' && typeof v !== 'number') add('error', p, ui('수량은 문자열(예: "100m")이어야 합니다'), 'type'); }
+          else if (!typeOK(kid.st, v)) add('error', p, ui`${kid.st === 'string' ? ui('문자열') : kid.st === 'boolean' ? ui('불리언(true/false)') : kid.st === 'integer' ? ui('정수') : ui('숫자')}여야 합니다 (현재: ${tname(v)})`, 'type', { exp: kid.st, act: tname(v) });
+          else if (en && v !== '' && !en.includes(v)) add('warn', p, ui`설명에 나온 값(${en.join(', ')})이 아닙니다`, 'enum');
+        } else if (kid.kind === 'object') { if (!isObj(v)) add('error', p, ui`객체여야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'object', act: tname(v) }); else walk(v, kid.cpath, p, depth + 1); }
         else if (kid.kind === 'array-object') {
-          if (!Array.isArray(v)) add('error', p, `배열이어야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'array', act: tname(v) });
-          else v.forEach((it, i) => { if (!isObj(it)) add('error', p.concat(i), '객체여야 합니다', 'type'); else walk(it, kid.cpath, p.concat(i), depth + 1); });
+          if (!Array.isArray(v)) add('error', p, ui`배열이어야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'array', act: tname(v) });
+          else v.forEach((it, i) => { if (!isObj(it)) add('error', p.concat(i), ui('객체여야 합니다'), 'type'); else walk(it, kid.cpath, p.concat(i), depth + 1); });
         } else if (kid.kind === 'array-scalar') {
-          if (!Array.isArray(v)) add('error', p, `배열이어야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'array', act: tname(v) });
-          else v.forEach((it, i) => { if (!itemOK(kid, it)) add('error', p.concat(i), `항목 타입 오류: ${kid.st} 여야 합니다`, 'type'); });
+          if (!Array.isArray(v)) add('error', p, ui`배열이어야 합니다 (현재: ${tname(v)})`, 'type', { exp: 'array', act: tname(v) });
+          else v.forEach((it, i) => { if (!itemOK(kid, it)) add('error', p.concat(i), ui`항목 타입 오류: ${kid.st} 여야 합니다`, 'type'); });
         } else if (kid.kind === 'map') {
-          if (!isObj(v)) add('error', p, `맵(키-값)이어야 합니다 (현재: ${tname(v)})`, 'type');
-          else for (const [mk, mv] of Object.entries(v)) if (!itemOK(kid, mv)) add('error', p.concat(mk), `값은 ${kid.st} 여야 합니다`, 'type');
-        } else if (kid.kind === 'map-object') { if (!isObj(v)) add('error', p, '맵이어야 합니다', 'type'); }
+          if (!isObj(v)) add('error', p, ui`맵(키-값)이어야 합니다 (현재: ${tname(v)})`, 'type');
+          else for (const [mk, mv] of Object.entries(v)) if (!itemOK(kid, mv)) add('error', p.concat(mk), ui`값은 ${kid.st} 여야 합니다`, 'type');
+        } else if (kid.kind === 'map-object') { if (!isObj(v)) add('error', p, ui('맵이어야 합니다'), 'type'); }
       }
     }
     walk(M, '', [], 0);
@@ -611,8 +624,8 @@
     const plural = path?.split('/').filter(part => !part.startsWith('{')).pop() || d.a.kind.toLowerCase();
     return { plural, full: d.a.group ? plural + '.' + d.a.group : plural, ops };
   }
-  const NAMEPH = '<이름>';
-  const OPS = [['create', '생성 (POST)', 'POST'], ['get', '조회 (GET)', 'GET'], ['replace', '전체 교체 (PUT)', 'PUT'], ['patch', '일부 수정 (PATCH)', 'PATCH'], ['delete', '삭제 (DELETE)', 'DELETE']];
+  const NAMEPH = ui('<이름>');
+  const OPS = [['create', ui('생성 (POST)'), 'POST'], ['get', ui('조회 (GET)'), 'GET'], ['replace', ui('전체 교체 (PUT)'), 'PUT'], ['patch', ui('일부 수정 (PATCH)'), 'PATCH'], ['delete', ui('삭제 (DELETE)'), 'DELETE']];
   /* 작업별 문서 엔드포인트 유무: [op, 라벨, 문서에 있는지] */
   function opsOf(d) {
     const ops = endpoints.operations(d.a);
@@ -659,7 +672,11 @@
     const md = isObj(M.metadata) ? M.metadata : {}, strv = v => typeof v === 'string' ? v : '';
     const rn = resNames(d), ns = d.ns ? (strv(opt.ns) || strv(md.namespace) || 'default') : '', name = strv(opt.name) || strv(md.name) || NAMEPH;
     const ep = rn.ops[opt.op];
-    if (!ep) return { supported: false, req: null, status: null, documented: [], note: '이 버전의 문서에는 해당 작업의 엔드포인트가 없습니다.' };
+    if (!ep) return { supported: false, req: null, status: null, documented: [], note: ui('이 버전의 문서에는 해당 작업의 엔드포인트가 없습니다.') };
+    if (ep.p.includes('{name}') && (name === NAMEPH || !name.trim())) {
+      return { supported: true, req: null, status: null, documented: [],
+        note: ui('요청 경로에 리소스 이름이 필요합니다. 이름 입력란에 대상 이름을 입력하세요.') };
+    }
     const eNs = encodeURIComponent(ns), eName = name === NAMEPH ? name : encodeURIComponent(name);   // 경로 세그먼트는 URL 인코딩
     const fill = p => p.replace('{namespace}', () => eNs || 'default').replace('{name}', () => eName);
     const q = []; if (opt.dry === 'All' && opt.op !== 'get') q.push('dryRun=All');   // dryRun 은 쓰기 요청에만 적용한다.
@@ -719,12 +736,12 @@
         for (const issue of unknown) delAt(body2, issue.segments);
         if (opt.fv === 'Warn') warnings = unknown.map(u => `unknown field "${u.path}"`);
         defaults = applyDefaults(body2, sch);
-        if (opt.dry === 'All') note = 'dryRun=All 이므로 서버가 검증만 하고 저장하지 않습니다(응답은 저장했다면 받을 내용과 같습니다).';
+        if (opt.dry === 'All') note = ui('dryRun=All 이므로 서버가 검증만 하고 저장하지 않습니다(응답은 저장했다면 받을 내용과 같습니다).');
       };
       if (opt.op === 'get' || opt.op === 'delete') {
         if (sc === 'notfound') notFound();
         else if (opt.op === 'get') { status = 200; body2 = serverObject(cur, d, sch, ns, 'get'); }
-        else { status = 200; body2 = { kind: 'Status', apiVersion: 'v1', metadata: {}, status: 'Success', details: { name, group: gr, kind: rn.plural, uid: uid(a.id + name) } }; if (opt.dry === 'All') note = 'dryRun=All 이므로 서버가 삭제할 수 있는지만 확인하고 실제로 삭제하지 않습니다.'; }
+        else { status = 200; body2 = { kind: 'Status', apiVersion: 'v1', metadata: {}, status: 'Success', details: { name, group: gr, kind: rn.plural, uid: uid(a.id + name) } }; if (opt.dry === 'All') note = ui('dryRun=All 이므로 서버가 삭제할 수 있는지만 확인하고 실제로 삭제하지 않습니다.'); }
       } else if (opt.op === 'create') {
         if (!decode400(M, issues) && !ident400(M) && !invalid422(issues)) { if (sc === 'conflict') fail(409, 'AlreadyExists', `${resName} "${name}" already exists`, { details: det }); else ok(M, issues); }
       } else if (opt.op === 'replace') {
@@ -741,7 +758,7 @@
           try { target = JP ? jsonPatch(cur, body) : mergePatch(cur, body); } catch (e) { fail(422, 'Invalid', `the server rejected our request due to an error in our request: ${e.message}`, { details: det }); }
           if (!body2 && !isObj(target)) fail(422, 'Invalid', 'the server rejected our request due to an error in our request: patched result is not an object', { details: det });
           if (!body2) { const iss2 = validate(target, a, d, sch); if (!decode400(target, iss2) && !ident400(target) && !invalid422(iss2)) ok(target, iss2); }
-          if (ctype === 'application/strategic-merge-patch+json' && status < 300) note = (note ? note + ' ' : '') + 'strategic-merge-patch 는 merge-patch 로 근사했습니다(목록의 병합 키는 반영하지 않음).';
+          if (ctype === 'application/strategic-merge-patch+json' && status < 300) note = (note ? note + ' ' : '') + ui('strategic-merge-patch 는 merge-patch 로 근사했습니다(목록의 병합 키는 반영하지 않음).');
         }
       }
     }
@@ -755,7 +772,7 @@
     r.headers.forEach(h => parts.push(h === 'Authorization: Bearer <token>' ? '-H "Authorization: Bearer $TOKEN"' : '-H ' + sq(h)));
     if (r.body) parts.push('-d ' + sq(JSON.stringify(r.body)));
     parts.push('"$APISERVER"' + sq(r.path));
-    return '# 사설 인증기관을 사용하는 경우 --cacert <CA 파일>을 추가하세요\n' + parts.join(' \\\n  ');
+    return ui('# 사설 인증기관을 사용하는 경우 --cacert <CA 파일>을 추가하세요\n') + parts.join(' \\\n  ');
   };
   const PATCH_T = { 'application/merge-patch+json': 'merge', 'application/json-patch+json': 'json', 'application/strategic-merge-patch+json': 'strategic' };
   /* 같은 요청을 oc 로: body 를 주면 create/replace 는 표준 입력(-f -)으로 넘김. fieldValidation → --validate(create/replace 만) */
@@ -769,7 +786,7 @@
       if (o.op === 'get' || o.op === 'delete') return `oc ${o.op} ${raw}`;
       if (o.op === 'create' || o.op === 'replace') return `${src}oc ${o.op} ${raw} -f ${file}`;
       // oc patch has no --raw flag. The curl command above uses the exact PATCH endpoint.
-      return '# 이 하위 리소스의 PATCH 요청은 위 curl 명령을 사용하세요.';
+      return ui('# 이 하위 리소스의 PATCH 요청은 위 curl 명령을 사용하세요.');
     }
     switch (o.op) {
       case 'create': return `${src}oc create -f ${file}${nsf}${dry}${val}`;
@@ -797,22 +814,230 @@
     ['pbody', 'ns', 'name'].forEach(k => { if (typeof o[k] === 'string' && o[k].length <= 100000) d[k] = o[k]; });
     return d;
   }
+  const privacyNote = ui('Secret, Route TLS 개인 키, TokenReview 토큰, 직접 입력한 패치 본문은 메모리에만 둡니다. 목록과 이전 적용 기록도 검사합니다.');
+  const PREF = 'apibook.simulation.autosave';
+  let draftDatabase;
+  function openDraftDatabase() {
+    if (!draftDatabase) draftDatabase = new Promise((resolve, reject) => {
+      const request = indexedDB.open('apibook.simulator', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => { db.close(); draftDatabase = null; };
+        scrubStoredDrafts(db).then(() => resolve(db), err => { db.close(); reject(err); });
+      };
+    }).catch(err => { draftDatabase = null; throw err; });
+    return draftDatabase;
+  }
+  // Read, merge and replace inside one transaction shared by all tabs.
+  async function draftTransaction(key, change) {
+    const db = await openDraftDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readwrite'), records = tx.objectStore('drafts');
+      const cleared = records.get('@cleared');
+      const request = records.get(key);
+      let value, failure;
+      request.onsuccess = () => {
+        try { value = change(request.result, records, cleared.result); }
+        catch (err) { failure = err; tx.abort(); }
+      };
+      tx.oncomplete = () => resolve(value);
+      tx.onabort = () => reject(failure || tx.error || new Error(ui('초안 저장 중단')));
+    });
+  }
+  const migratedSecrets = new Map();
+  function containsSecret(value) {
+    const nodes = [value], seen = new WeakSet();
+    while (nodes.length) {
+      const node = nodes.pop();
+      if (!node || typeof node !== 'object' || seen.has(node)) continue;
+      seen.add(node);
+      if (node.kind === 'Secret' || node.kind === 'SecretList' || (node.kind === 'Route' && node.spec?.tls?.key) ||
+          (node.kind === 'TokenReview' && node.spec?.token)) return true;
+      if (Array.isArray(node.items) && (
+        (node.kind === 'RouteList' && node.items.some(it => it?.spec?.tls?.key)) ||
+        (node.kind === 'TokenReviewList' && node.items.some(it => it?.spec?.token))
+      )) return true;
+      const applied = node.metadata?.annotations?.['kubectl.kubernetes.io/last-applied-configuration'];
+      if (typeof applied === 'string' && applied.trim()) {
+        try {
+          const snapshot = JSON.parse(applied);
+          if (!isObj(snapshot)) return true;
+          nodes.push(snapshot);
+        } catch { return true; }
+      }
+      for (const child of Object.values(node)) if (child && typeof child === 'object') nodes.push(child);
+    }
+    return false;
+  }
+  const sensitiveDraft = it => it?.id === 'secret-v1' || containsSecret(it?.M) ||
+    (typeof it?.opt?.pbody === 'string' && it.opt.pbody !== defaultOpt().pbody && it.opt.pbody.trim() !== '');
+  function persistentDrafts(store) {
+    const items = store.items.filter(it => it && !sensitiveDraft(it));
+    return { items, active: Math.max(0, items.indexOf(store.items[store.active])) };
+  }
+  function keepInMemory(key, drafts) {
+    migratedSecrets.set(key, (migratedSecrets.get(key) || []).concat(drafts));
+  }
+  function scrubStoredDrafts(db) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('drafts', 'readwrite'), recovered = new Map();
+      const scan = tx.objectStore('drafts').openCursor();
+      scan.onsuccess = () => {
+        const cursor = scan.result;
+        if (!cursor) return;
+        const old = cursor.value;
+        if (Array.isArray(old?.items)) {
+          const privateItems = old.items.filter(sensitiveDraft);
+          if (privateItems.length) {
+            cursor.update(persistentDrafts(old));
+            recovered.set(cursor.key, privateItems);
+          }
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => {
+        recovered.forEach((drafts, key) => keepInMemory(key, drafts));
+        resolve();
+      };
+      tx.onabort = () => reject(tx.error || new Error(ui('기존 초안을 정리하지 못했습니다.')));
+    });
+  }
+  function cleanDrafts(storage, clear) {
+    if (clear) migratedSecrets.clear();
+    for (const key of Object.keys(storage).filter(k => k.startsWith(LSKEY))) {
+      if (clear) { storage.removeItem(key); continue; }
+      let old;
+      try { old = JSON.parse(storage.getItem(key)); } catch { continue; }
+      if (!Array.isArray(old?.items)) continue;
+      const secrets = old.items.filter(sensitiveDraft);
+      if (secrets.length) {
+        storage.setItem(key, JSON.stringify(persistentDrafts(old)));
+        keepInMemory(key, secrets);
+      }
+    }
+  }
+  function manifestDocuments(text) {
+    if (typeof text !== 'string' || text.length > MAX_INPUT) throw new Error(ui('YAML 문자열을 입력하세요 (최대 ') + (MAX_INPUT >> 20) + 'MB)');
+    const entries = [];
+    for (const part of text.replace(/^\uFEFF/, '').split(/^(?:---|\.\.\.)[ \t]*(?:#[^\n]*)?\r?$/m)) {
+      if (!part.split('\n').some(line => line.trim() && !line.trimStart().startsWith('#'))) continue;
+      const warnings = [];
+      try {
+        for (const M of yamlParse(part, warnings)) entries.push({ M, warnings });
+      } catch (e) {
+        entries.push({ parseError: e.message, warnings });
+      }
+    }
+    if (!entries.length) throw new Error(ui('검증할 문서가 없습니다'));
+    return entries;
+  }
+  function checkDocument(entry, docs, schemaOf) {
+    if (entry.parseError) return { issues: [{ level: 'error', path: 'YAML', msg: entry.parseError, code: 'parse' }] };
+    const M = entry.M;
+    if (!isObj(M)) return { issues: [{ level: 'error', path: '', msg: ui('리소스 객체가 필요합니다') }] };
+    const d = docs.find(d => d.a.kind === M.kind && d.gv === M.apiVersion);
+    if (!d) return { issues: [{ level: 'error', path: 'apiVersion/kind', msg: ui('이 릴리스의 API와 일치하지 않습니다') }] };
+    return { id: d.a.id, issues: validate(M, d.a, d, schemaOf(d.a.id)) };
+  }
+  function assessDocuments(entries, docs, schemaOf) {
+    return entries.map((entry, i) => {
+      const { id, issues } = checkDocument(entry, docs, schemaOf);
+      return { document: i + 1, id, kind: typeof entry.M?.kind === 'string' ? entry.M.kind : undefined,
+        apiVersion: typeof entry.M?.apiVersion === 'string' ? entry.M.apiVersion : undefined,
+        warnings: entry.warnings, valid: !issues.some(x => x.level === 'error'),
+        issues: issues.map(({ level, path, msg, code }) => ({ level, path, msg, code })) };
+    });
+  }
+  function upgradeImpact(before, after) {
+    const key = x => JSON.stringify([x.level, x.path, x.code, x.msg]);
+    const difference = (left, right) => {
+      const known = new Set(right.map(key));
+      return left.filter(x => !known.has(key(x)));
+    };
+    return before.map((old, i) => {
+      const next = after[i], previous = new Set(old.issues.map(key));
+      return { document: old.document, kind: old.kind, apiVersion: old.apiVersion, warnings: old.warnings,
+        fromValid: old.valid, toValid: next.valid, introduced: difference(next.issues, old.issues),
+        resolved: difference(old.issues, next.issues), remaining: next.issues.filter(x => previous.has(key(x))) };
+    });
+  }
   /* localStorage 값을 검증해 복원. JSON 으로는 유효하지만 형식이 다르면 빈 상태 */
   function restoreStore(raw, docOf) {
     const empty0 = { items: [], active: 0 };
     let s; try { s = typeof raw === 'string' ? JSON.parse(raw) : null; } catch (e) { return empty0; }
     if (!isObj(s) || !Array.isArray(s.items)) return empty0;
-    const seen = new Set(), items = [], want = Number.isInteger(s.active) ? s.active : 0;
+    const items = [], want = Number.isInteger(s.active) ? s.active : 0;
     let act = 0;
     s.items.forEach((it, j) => {
       if (j === want) act = items.length;   // 활성 항목의 새 위치(그 항목이 빠지면 다음에 남는 항목)
-      if (!isObj(it) || typeof it.id !== 'string' || seen.has(it.id) || !isObj(it.M) || !treeOK(it.M, 0)) return;
+      if (!isObj(it) || typeof it.id !== 'string' || !isObj(it.M) || !treeOK(it.M, 0)) return;
       let dd = null; try { dd = docOf(it.id); } catch (e) { /* 무시 */ }
       if (!dd) return;
-      seen.add(it.id); items.push({ id: it.id, M: it.M, opt: cleanOpt(it.opt) });
+      items.push({ id: it.id, M: it.M, opt: cleanOpt(it.opt),
+        uid: typeof it.uid === 'string' ? it.uid : 'legacy:' + JSON.stringify([it.id, it.M.metadata?.namespace, it.M.metadata?.name, j]),
+        ...(it.conflict ? { conflict: true } : {}) });
     });
     if (want >= s.items.length) act = items.length - 1;
     return { items, active: Math.max(0, Math.min(act, items.length - 1)) };
+  }
+  const draftName = it => it.M.metadata?.name && JSON.stringify([it.id, it.M.metadata.namespace || '', it.M.metadata.name]);
+  function sameValue(a, b) {
+    if (Object.is(a, b)) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every(k => hasOwn(b, k) && sameValue(a[k], b[k]));
+  }
+  const sameDraft = (a, b) => a.id === b.id && sameValue(a.M, b.M) && sameValue(a.opt, b.opt);
+  function mergeLegacyDrafts(existing, legacy) {
+    if (!existing.items.length) return legacy;
+    const items = existing.items.slice(), unmatched = new Set(items);
+    for (const draft of legacy.items) {
+      const match = [...unmatched].find(it => sameDraft(it, draft));
+      if (match) { unmatched.delete(match); continue; }
+      const uidTaken = items.some(it => it.uid === draft.uid);
+      const name = draftName(draft);
+      if (uidTaken || (name && items.some(it => draftName(it) === name))) {
+        items.push({ ...draft, uid: uidTaken ? crypto.randomUUID() : draft.uid, conflict: true });
+      } else items.push(draft);
+    }
+    return { items, active: existing.active };
+  }
+  function mergeDrafts(base, local, latest) {
+    const byId = new Map(base.items.map(it => [it.uid, it]));
+    const current = new Set(local.items.map(it => it.uid));
+    const items = latest.items.slice(), aliases = new Map();
+    let conflict = false;
+    for (const old of base.items) {
+      if (current.has(old.uid)) continue;
+      const i = items.findIndex(it => it.uid === old.uid);
+      if (i >= 0 && sameDraft(items[i], old)) items.splice(i, 1);
+      else if (i >= 0) conflict = true;
+    }
+    for (const draft of local.items) {
+      const old = byId.get(draft.uid);
+      if (old && sameDraft(old, draft)) continue;
+      let i = items.findIndex(it => it.uid === draft.uid);
+      if (i < 0 && !old && draftName(draft)) i = items.findIndex(it => !it.conflict && draftName(it) === draftName(draft));
+      if (i < 0) {
+        items.push(draft);
+        if (old) conflict = true; // 다른 탭의 삭제와 이 탭의 수정이 겹쳤다.
+      } else if (sameDraft(items[i], draft)) {
+        if (items[i].uid !== draft.uid) aliases.set(draft.uid, { uid: items[i].uid });
+      } else if (old && sameDraft(items[i], old)) {
+        items[i] = draft;
+      } else {
+        // 다른 탭은 원본을 계속 편집한다. 이 탭의 후속 입력은 새 보관본만 갱신한다.
+        const fork = { uid: items[i].uid === draft.uid ? crypto.randomUUID() : draft.uid, conflict: true };
+        aliases.set(draft.uid, fork);
+        items.push({ ...draft, ...fork });
+        conflict = true;
+      }
+    }
+    const selected = local.items[local.active]?.uid;
+    const active = items.findIndex(it => it.uid === (aliases.get(selected)?.uid || selected));
+    return { snapshot: { items, active: Math.max(0, active) }, conflict, aliases };
   }
   /* i 번째 탭 닫기: 활성 탭이 뒤로 밀리면 인덱스를 보정 */
   function closeTab(store, i) {
@@ -832,10 +1057,58 @@
   function mount(host, C, apiId) {
     const esc = C.esc, ver = C.ver;
     const store = { items: [], active: 0 };
-    try { const s = restoreStore(localStorage.getItem(LSKEY + ver), C.docOf); store.items = s.items; store.active = s.active; } catch (e) { /* 저장소 접근 불가/손상: 빈 상태로 시작 */ }
+    let canCoordinate = false;
+    try { canCoordinate = !!(globalThis.indexedDB && globalThis.crypto?.randomUUID); }
+    catch { /* 브라우저 정책이 저장소 접근 자체를 차단해도 편집기는 사용할 수 있다. */ }
+    const memoryOnly = ui('탭 간 저장을 조정할 수 없어 메모리에서만 편집합니다. 로컬 파일 또는 localhost에서 열어 주세요.');
+    let autoSave = false, storageError = '';
+    try {
+      autoSave = canCoordinate && localStorage.getItem(PREF) !== 'off';
+      const key = LSKEY + ver;
+      const raw = localStorage.getItem(key);
+      const migrated = migratedSecrets.get(key) || [];
+      cleanDrafts(localStorage, false);
+      const saved = restoreStore(raw, C.docOf);
+      const memory = restoreStore(JSON.stringify({ items: migrated }), C.docOf);
+      store.items = saved.items.concat(memory.items); store.active = saved.active;
+      migratedSecrets.delete(key); } catch { storageError = ui('브라우저 저장소를 사용할 수 없습니다.'); }
     let dead = false, tab = 'yaml', busy = false;
     const schemas = new Map(), loaded = new Set();   // loaded: ensureFields 가 끝난 id (그 전에는 스키마를 캐시하지 않음)
-    const save = () => { try { localStorage.setItem(LSKEY + ver, JSON.stringify({ items: store.items.map(i => ({ id: i.id, M: i.M, opt: i.opt })), active: store.active })); } catch (e) {} };
+    let baseline = clone(persistentDrafts(store));
+    const key = LSKEY + ver;
+    let generation = 0, lastClear;
+    const aliases = new Map();
+    function remap(snapshot) {
+      for (const draft of snapshot.items) {
+        const alias = aliases.get(draft.uid);
+        if (alias) Object.assign(draft, alias);
+      }
+    }
+    let writes = Promise.resolve();
+    const save = () => {
+      const note = host.querySelector('#storage-note');
+      if (!autoSave) return;
+      for (const draft of store.items) draft.uid ||= crypto.randomUUID();
+      const local = clone(persistentDrafts(store)), epoch = generation;
+      writes = writes.then(async () => {
+        if (epoch !== generation || localStorage.getItem(PREF) === 'off') return;
+        remap(local);
+        const merged = await draftTransaction(key, (saved, records, cleared) => {
+          if (cleared !== lastClear || epoch !== generation || localStorage.getItem(PREF) === 'off') return;
+          const disk = persistentDrafts(saved || { items: [], active: 0 });
+          const result = mergeDrafts(baseline, local, disk);
+          records.put(result.snapshot, key);
+          return result;
+        });
+        if (!merged || epoch !== generation) return;
+        for (const [id, alias] of merged.aliases) aliases.set(id, alias);
+        remap(local);
+        remap(store);
+        if (merged.aliases.size && !dead) rememberTab();
+        baseline = local;
+        if (merged.conflict) note.textContent = ui('다른 탭의 변경을 감지했습니다. 저장된 두 편집본은 새로고침 후 확인할 수 있습니다. 삭제와 수정이 겹치면 수정본을 유지합니다.');
+      }).catch(() => { note.textContent = ui('저장하지 못했습니다. 편집 내용은 이 화면에 있습니다.'); });
+    };
     const item = () => store.items[store.active];
     const docOf = id => C.docOf(id);
     const schemaOf = id => {
@@ -846,9 +1119,13 @@
     };
     const ensure = id => Promise.resolve(C.ensureFields(id)).then(() => { loaded.add(id); });
 
-    host.innerHTML = `<div class="sim">
+    host.innerHTML = ui`<div class="sim">
       <h2 class="d-title" style="font-family:var(--sans);font-size:22px">API 설계 시뮬레이터 <span class="gv">${esc(ver)}</span></h2>
       <p class="note" style="margin:0 0 10px">리소스를 설계하면 YAML이 만들어지고, 스펙(필수 값·타입·알 수 없는 필드)으로 검증합니다. 요청을 보냈을 때 서버가 어떻게 응답할지도 가상으로 확인합니다. 실제 클러스터에는 아무것도 전송하지 않습니다.</p>
+      <div class="sbar"><label class="chk"><input type="checkbox" id="autosave"> 이 브라우저에 초안 자동 저장</label>
+        <button class="btn ghost" id="clear-drafts">모든 버전의 저장본 지우기</button></div>
+      <p class="note" id="storage-note" role="status">${privacyNote}</p>
+      <p class="note" id="draft-status" role="status"></p><div id="import-report" aria-live="polite"></div>
       <div class="rtabs" id="rtabs"></div>
       <div class="note" id="loaderr" role="status" style="margin:0 0 6px;min-height:0" hidden></div>
       <div class="addres"><input class="tfind" id="addq" placeholder="＋ 리소스 추가 (예: route, service, networkpolicy)" autocomplete="off" aria-label="리소스 추가"><div class="addlist" id="addlist" hidden></div></div>
@@ -857,10 +1134,44 @@
       <section class="simout"><div class="tabs" role="tablist" aria-label="출력" id="otabs"><button role="tab" id="sim-ot-yaml" data-t="yaml" aria-controls="obody" aria-selected="true" tabindex="0">YAML</button><button role="tab" id="sim-ot-check" data-t="check" aria-controls="obody" aria-selected="false" tabindex="-1">검증 <span id="cbadge"></span></button><button role="tab" id="sim-ot-req" data-t="req" aria-controls="obody" aria-selected="false" tabindex="-1">요청·응답</button></div><div id="obody" role="tabpanel" aria-labelledby="sim-ot-yaml" tabindex="0"></div></section></div></div>`;
     const $ = s => host.querySelector(s);
 
+    const autosave = $('#autosave');
+    autosave.disabled = !canCoordinate;
+    autosave.checked = autoSave;
+    if (storageError || !autoSave) $('#storage-note').textContent = storageError || (canCoordinate ? ui('자동 저장이 꺼져 있습니다. 편집 내용은 메모리에만 유지됩니다.') : memoryOnly);
+    async function setAutoSave(on, erase = false) {
+      generation++;
+      autoSave = on; autosave.checked = on;
+      try {
+        localStorage.setItem(PREF, on ? 'on' : 'off');
+        if (erase) {
+          cleanDrafts(localStorage, true);
+          const marker = crypto.getRandomValues(new Uint32Array(2)).join('-');
+          if (globalThis.indexedDB) await draftTransaction(key, (_, records) => {
+            records.clear();
+            records.put(marker, '@cleared');
+          });
+          lastClear = marker;
+          baseline = { items: [], active: 0 };
+          localStorage.setItem(PREF + '.cleared', marker);
+        }
+        $('#storage-note').textContent = on ? privacyNote : (erase ? ui('모든 버전의 저장본을 지웠습니다. ') : '') + ui('이후 편집 내용은 메모리에만 유지됩니다.');
+        if (on) save();
+      } catch { $('#storage-note').textContent = ui('브라우저 저장소 변경에 실패했습니다.'); }
+    }
+    const syncPreference = e => {
+      if (e.key === PREF + '.cleared') { generation++; lastClear = e.newValue; baseline = { items: [], active: 0 }; }
+      if (e.key !== PREF) return;
+      generation++;
+      autoSave = canCoordinate && e.newValue !== 'off'; autosave.checked = autoSave;
+      $('#storage-note').textContent = autoSave ? privacyNote : ui('자동 저장이 꺼져 있습니다.');
+    };
+    window.addEventListener('storage', syncPreference);
+    autosave.onchange = () => setAutoSave(autosave.checked);
+    $('#clear-drafts').onclick = () => setAutoSave(false, true);
     /* ---- 리소스 추가 / 탭 ---- */
     function newItem(id) {
-      const d = docOf(id), a = d.a, M = { apiVersion: d.gv, kind: a.kind, metadata: { name: 'my-' + a.kind.toLowerCase().slice(0, 30) } };
-      if (d.ns) M.metadata.namespace = 'default';
+      const d = docOf(id), a = d.a, M = { apiVersion: d.gv, kind: a.kind, ...(needsName(a) ? { metadata: { name: 'my-' + a.kind.toLowerCase().slice(0, 30) } } : {}) };
+      if (d.ns && M.metadata) M.metadata.namespace = 'default';
       const it = { id, M, opt: defaultOpt() };
       ensureRequired(M, [], '', schemaOf(id), 0);
       return it;
@@ -879,28 +1190,34 @@
     async function addItemAsync(id) {   // 필드 로드 후에 추가. 실패하면 폼 위쪽에 오류 한 줄
       if (busy || !docOf(id) || dead) return;
       if (!loaded.has(id)) {
-        setBusy(true, '불러오는 중…');
-        try { await ensure(id); } catch (e) { if (dead) return; setBusy(false); const le = $('#loaderr'); le.hidden = false; le.style.color = 'var(--bad)'; le.textContent = '스키마 데이터를 불러오지 못했습니다: ' + (e && e.message || e); return; }
+        setBusy(true, ui('불러오는 중…'));
+        try { await ensure(id); } catch (e) { if (dead) return; setBusy(false); const le = $('#loaderr'); le.hidden = false; le.style.color = 'var(--bad)'; le.textContent = ui('스키마 데이터를 불러오지 못했습니다: ') + (e && e.message || e); return; }
         if (dead) return; setBusy(false);
       }
       addItem(id);
     }
+    function rememberTab() {
+      const draft = item();
+      if (!draft) return;
+      const state = draft.uid && !sensitiveDraft(draft) ? { draftUid: draft.uid } : null;
+      try { history.replaceState(state, '', C.hash('sim:' + draft.id)); } catch {}
+    }
     function renderTabs() {
-      if (item()) { try { history.replaceState(null, '', C.hash('sim:' + item().id)); } catch (e) {} }
+      rememberTab();
       const rt = $('#rtabs'); rt.innerHTML = '';
-      if (!store.items.length) rt.appendChild(el('span', { class: 'note', text: '아래 입력창에서 리소스를 추가하세요.' }));
+      if (!store.items.length) rt.appendChild(el('span', { class: 'note', text: ui('아래 입력창에서 리소스를 추가하세요.') }));
       store.items.forEach((it, i) => {
         const a = docOf(it.id).a;
         rt.appendChild(el('span', { class: 'rtab' + (i === store.active ? ' on' : '') }, [
-          el('button', { class: 'rt', text: a.kind, title: docOf(it.id).gv, onclick: () => { store.active = i; save(); renderTabs(); renderForm(); renderOut(); } }),
-          el('button', { class: 'rx', text: '×', 'aria-label': a.kind + ' 닫기', onclick: () => { closeTab(store, i); save(); renderTabs(); renderForm(); renderOut(); } }),
+          el('button', { class: 'rt', text: store.items.filter(other => other.id === it.id).length > 1 ? a.kind + ' · ' + ([it.M.metadata?.namespace, it.M.metadata?.name || (i + 1)].filter(Boolean).join('/')) + (it.conflict ? ui(' (충돌 보관본)') : '') : a.kind, title: docOf(it.id).gv, onclick: () => { store.active = i; save(); renderTabs(); renderForm(); renderOut(); } }),
+          el('button', { class: 'rx', text: '×', 'aria-label': a.kind + ui(' 닫기'), onclick: () => { closeTab(store, i); save(); renderTabs(); renderForm(); renderOut(); } }),
         ]));
       });
       const rel = $('#related'); rel.innerHTML = '';
       if (item() && C.G && C.G.adj.has(item().id)) {
         const seen = new Set(store.items.map(i => i.id)), ids = [];
         for (const e of C.G.adj.get(item().id)) { if (e.type === 'same' || e.type === 'variant') continue; const o = e.s === item().id ? e.t : e.s; if (!seen.has(o) && !ids.includes(o)) ids.push(o); }
-        if (ids.length) { rel.appendChild(el('span', { class: 'note', text: '연결된 API 추가:' })); ids.slice(0, 8).forEach(o => rel.appendChild(el('button', { class: 'chip', text: '+ ' + C.G.byId.get(o).kind, onclick: () => addItemAsync(o) }))); }
+        if (ids.length) { rel.appendChild(el('span', { class: 'note', text: ui('연결된 API 추가:') })); ids.slice(0, 8).forEach(o => rel.appendChild(el('button', { class: 'chip', text: '+ ' + C.G.byId.get(o).kind, onclick: () => addItemAsync(o) }))); }
       }
     }
     const aq = $('#addq'), al = $('#addlist');
@@ -942,34 +1259,33 @@
     }
     function renderForm0() {
       const f = $('#sform'); f.innerHTML = '';
-      const it = item(); if (!it) { f.appendChild(el('div', { class: 'empty', text: '리소스를 추가하면 설계 폼이 나타납니다.' })); return; }
+      const it = item(); if (!it) { f.appendChild(el('div', { class: 'empty', text: ui('리소스를 추가하면 설계 폼이 나타납니다.') })); return; }
       const d = docOf(it.id), a = d.a, sch = schemaOf(it.id), M = it.M;
       const bar = el('div', { class: 'sbar' }, [
-        el('button', { class: 'btn ghost', text: '필수 값 예시로 채우기', onclick: () => { sampleFill(M, [], '', sch, 0); if (isObj(M.metadata) && empty(M.metadata.name)) M.metadata.name = 'example'; renderForm(); refreshOut(); } }),
-        el('button', { class: 'btn ghost', text: 'YAML 가져오기', onclick: () => toggleImport() }),
-        el('button', { class: 'btn ghost', text: '초기화', onclick: () => { store.items[store.active] = Object.assign(newItem(it.id), { opt: it.opt }); save(); renderForm(); renderOut(); } }),
-        el('a', { class: 'btn ghost', href: C.hash('api:' + it.id), text: '스펙 보기' }),
+        el('button', { class: 'btn ghost', text: ui('필수 값 예시로 채우기'), onclick: () => { sampleFill(M, [], '', sch, 0); if (needsName(a) && isObj(M.metadata) && empty(M.metadata.name) && empty(M.metadata.generateName)) M.metadata.name = 'example'; renderForm(); refreshOut(); } }),
+        el('button', { class: 'btn ghost', text: ui('YAML 가져오기'), onclick: () => toggleImport() }),
+        el('button', { class: 'btn ghost', text: ui('폼 값 초기화'), title: ui('요청 설정은 유지됩니다.'), onclick: () => { store.items[store.active] = Object.assign(newItem(it.id), { opt: it.opt, uid: it.uid, ...(it.conflict ? { conflict: true } : {}) }); save(); renderForm(); renderOut(); } }),
+        el('a', { class: 'btn ghost', href: C.hash('api:' + it.id), text: ui('스펙 보기') }),
       ]);
       f.appendChild(bar);
       const imp = el('div', { class: 'import', id: 'imp', hidden: true }, [
-        el('textarea', { id: 'imptxt', 'aria-label': '가져올 YAML 또는 JSON', rows: 8, placeholder: 'YAML 또는 JSON을 붙여 넣으세요. 여러 문서(---)면 이 리소스와 같은 kind만 가져옵니다.', spellcheck: 'false' }),
-        el('div', { class: 'sbar' }, [el('button', { class: 'btn', text: '폼에 적용', onclick: doImport }), el('span', { id: 'imperr', class: 'note', style: 'margin:0;color:var(--bad)' })]),
+        el('textarea', { id: 'imptxt', 'aria-label': ui('가져올 YAML 또는 JSON'), rows: 8, placeholder: ui('YAML 또는 JSON을 붙여 넣으세요. 여러 문서는 ---로 구분하세요. 각 문서를 해당 API로 검증합니다.'), spellcheck: 'false' }),
+        el('div', { class: 'sbar' }, [el('button', { class: 'btn', text: ui('폼에 적용'), onclick: doImport }), el('span', { id: 'imperr', class: 'note', style: 'margin:0;color:var(--bad)' })]),
       ]);
       f.appendChild(imp);
       f.appendChild(el('div', { class: 'sfix' }, [fixed('apiVersion', M.apiVersion), fixed('kind', M.kind)]));
       const root = el('div', { class: 'sroot', id: 'sroot' });
-      root.appendChild(metaField(M));
+      root.appendChild(metaField(M, needsName(a)));
       renderKids(root, '', [], sch, M, 0);
       f.appendChild(root);
       markIssues();
     }
-    function fixed(k, v) { return el('div', { class: 'sf fixedf' }, [el('div', { class: 'sfh' }, [el('span', { class: 'sfn', text: k }), el('span', { class: 'ftp', text: '고정' }), el('code', { class: 'fv', text: v })])]); }
-    function metaField(M) {
+    function fixed(k, v) { return el('div', { class: 'sf fixedf' }, [el('div', { class: 'sfh' }, [el('span', { class: 'sfn', text: k }), el('span', { class: 'ftp', text: ui('고정') }), el('code', { class: 'fv', text: v })])]); }
+    function metaField(M, required) {
       const wrap = el('div', { class: 'sf', 'data-vp': 'metadata' });
-      wrap.appendChild(el('div', { class: 'sfh' }, [el('span', { class: 'sfn', text: 'metadata' }), el('span', { class: 'ftp', text: 'ObjectMeta' }), el('span', { class: 'req', text: '필수' })]));
+      wrap.appendChild(el('div', { class: 'sfh' }, [el('span', { class: 'sfn', text: 'metadata' }), el('span', { class: 'ftp', text: 'ObjectMeta' }), required && el('span', { class: 'req', text: ui('필수') })]));
       const body = el('div', { class: 'sfb' }); wrap.appendChild(body);
-      if (!isObj(M.metadata)) M.metadata = {};
-      META.forEach(kid => renderField(body, kid, ['metadata', kid.name], null, M, 1, true));
+      META.forEach(kid => renderField(body, required ? kid : { ...kid, required: false }, ['metadata', kid.name], null, M, 1, true));
       return wrap;
     }
     function renderKids(container, sp, vp, sch, M, depth) {
@@ -978,12 +1294,12 @@
     function renderField(container, kid, vp, sch, M, depth, isMeta) {
       const present = hasAt(M, vp);
       const wrap = el('div', { class: 'sf' + (present ? '' : ' off'), 'data-vp': pstr(vp) });
-      const chk = el('input', { type: 'checkbox', class: 'sfc', 'aria-label': kid.name + ' 포함', checked: present, disabled: kid.required && !isMeta ? true : (isMeta && kid.name === 'name' ? true : false) });
+      const chk = el('input', { type: 'checkbox', class: 'sfc', 'aria-label': kid.name + ui(' 포함'), checked: present, disabled: kid.required && (!isMeta || present) });
       const head = el('div', { class: 'sfh' }, [chk, el('span', { class: 'sfn', text: kid.name }), el('span', { class: 'ftp', text: kid.type })]);
-      if (kid.required && !(isMeta && kid.name !== 'name')) head.appendChild(el('span', { class: 'req', text: '필수' }));
-      const kd = !isMeta && kidDef(kid); if (kd) head.appendChild(el('span', { class: 'fdef', text: '기본 ' + JSON.stringify(kd.v), title: '설명 문장에서 추정한 서버 기본값(생략하면 서버가 채울 것으로 보임)' }));
+      if (kid.required && !(isMeta && kid.name !== 'name')) head.appendChild(el('span', { class: 'req', text: ui('필수') }));
+      const kd = !isMeta && kidDef(kid); if (kd) head.appendChild(el('span', { class: 'fdef', text: ui('기본 ') + JSON.stringify(kd.v), title: ui('설명 문장에서 추정한 서버 기본값(생략하면 서버가 채울 것으로 보임)') }));
       const did = kid.desc ? nid('d') : null;
-      if (kid.desc) head.appendChild(el('button', { class: 'sfi', type: 'button', text: 'ⓘ', title: '설명 보기', 'aria-label': kid.name + ' 설명', 'aria-expanded': 'false', 'aria-controls': did, onclick: e => { const dd = wrap.querySelector(':scope > .sfd'); dd.hidden = !dd.hidden; e.currentTarget.setAttribute('aria-expanded', String(!dd.hidden)); } }));
+      if (kid.desc) head.appendChild(el('button', { class: 'sfi', type: 'button', text: 'ⓘ', title: ui('설명 보기'), 'aria-label': kid.name + ui(' 설명'), 'aria-expanded': 'false', 'aria-controls': did, onclick: e => { const dd = wrap.querySelector(':scope > .sfd'); dd.hidden = !dd.hidden; e.currentTarget.setAttribute('aria-expanded', String(!dd.hidden)); } }));
       wrap.appendChild(head);
       if (kid.desc) wrap.appendChild(el('div', { class: 'sfd', id: did, hidden: true, text: kid.desc }));
       const err = el('div', { class: 'sfe', id: nid('e'), hidden: true }); wrap.appendChild(err);
@@ -1008,7 +1324,7 @@
         } else {
           const num = /^(integer|number)$/.test(kid.st);
           const lid = en ? 'dl-' + Math.random().toString(36).slice(2, 8) : null;
-          inp = el('input', { class: 'sin', type: num ? 'number' : 'text', step: kid.st === 'integer' ? '1' : 'any', value: v == null ? '' : String(v), list: lid, placeholder: en ? en.join(' / ') : (kid.st === 'string' ? '문자열' : kid.st), 'aria-label': kid.name, spellcheck: 'false' });
+          inp = el('input', { class: 'sin', type: num ? 'number' : 'text', step: kid.st === 'integer' ? '1' : 'any', value: v == null ? '' : String(v), list: lid, placeholder: en ? en.join(' / ') : (kid.st === 'string' ? ui('문자열') : kid.st), 'aria-label': kid.name, spellcheck: 'false' });
           inp.addEventListener('input', () => { const s = inp.value; set(num ? (s === '' ? null : Number(s)) : (kid.sub === 'intorstring' && /^\d{1,15}$/.test(s) ? Number(s) : s)); });
           if (en) { const dl = el('datalist', { id: lid }, en.map(x => el('option', { value: x }))); body.appendChild(dl); }
         }
@@ -1018,25 +1334,25 @@
       } else if (kid.kind === 'array-object') {
         const arr = Array.isArray(v) ? v : [];
         arr.forEach((_, i) => {
-          const card = el('div', { class: 'sitem' }, [el('div', { class: 'sih' }, [el('b', { text: `항목 ${i + 1}` }), el('button', { class: 'rx', text: '삭제', onclick: () => { arr.splice(i, 1); renderForm(); refreshOut(); } })])]);
+          const card = el('div', { class: 'sitem' }, [el('div', { class: 'sih' }, [el('b', { text: ui`항목 ${i + 1}` }), el('button', { class: 'rx', text: ui('삭제'), onclick: () => { arr.splice(i, 1); renderForm(); refreshOut(); } })])]);
           renderKids(card, kid.cpath, vp.concat(i), sch, M, depth + 1); body.appendChild(card);
         });
-        body.appendChild(el('button', { class: 'btn ghost', text: '＋ 항목 추가', onclick: () => { arr.push({}); ensureRequired(M, vp.concat(arr.length - 1), kid.cpath, sch, 0); renderForm(); refreshOut(); focusLast(vp); } }));
+        body.appendChild(el('button', { class: 'btn ghost', text: ui('＋ 항목 추가'), onclick: () => { arr.push({}); ensureRequired(M, vp.concat(arr.length - 1), kid.cpath, sch, 0); renderForm(); refreshOut(); focusLast(vp); } }));
       } else if (kid.kind === 'array-scalar') {   // 항목마다 입력 하나(쉼표가 든 값도 그대로)
         const num = /^(integer|number)$/.test(kid.st), arr = Array.isArray(v) ? v : [];
         const attach = () => { if (getAt(M, vp) !== arr) setAt(M, vp, arr); };
         const conv = s => num ? (s.trim() === '' ? null : isNaN(Number(s)) ? s : Number(s)) : kid.st === 'boolean' ? s.trim() === 'true' : s;
         arr.forEach((x, i) => {
-          const inp = el('input', { class: 'sin', type: 'text', value: x == null ? '' : typeof x === 'object' ? JSON.stringify(x) : String(x), placeholder: kid.st === 'string' ? '문자열' : kid.st, 'aria-label': `${kid.name} 항목 ${i + 1}`, spellcheck: 'false' });
+          const inp = el('input', { class: 'sin', type: 'text', value: x == null ? '' : typeof x === 'object' ? JSON.stringify(x) : String(x), placeholder: kid.st === 'string' ? ui('문자열') : kid.st, 'aria-label': ui`${kid.name} 항목 ${i + 1}`, spellcheck: 'false' });
           inp.addEventListener('input', () => { attach(); arr[i] = conv(inp.value); refreshOut(); });
-          body.appendChild(el('div', { class: 'kv kv1' }, [inp, el('button', { class: 'rx', type: 'button', text: '×', 'aria-label': `${kid.name} 항목 ${i + 1} 삭제`, onclick: () => { attach(); arr.splice(i, 1); renderForm(); refreshOut(); } })]));
+          body.appendChild(el('div', { class: 'kv kv1' }, [inp, el('button', { class: 'rx', type: 'button', text: '×', 'aria-label': ui`${kid.name} 항목 ${i + 1} 삭제`, onclick: () => { attach(); arr.splice(i, 1); renderForm(); refreshOut(); } })]));
         });
-        body.appendChild(el('button', { class: 'btn ghost', type: 'button', text: '＋ 항목 추가', onclick: () => { attach(); arr.push(num ? null : kid.st === 'boolean' ? false : ''); renderForm(); refreshOut(); focusLast(vp); } }));
+        body.appendChild(el('button', { class: 'btn ghost', type: 'button', text: ui('＋ 항목 추가'), onclick: () => { attach(); arr.push(num ? null : kid.st === 'boolean' ? false : ''); renderForm(); refreshOut(); focusLast(vp); } }));
       } else if (kid.kind === 'map') {
         const o = isObj(v) ? v : {}, num = /^(integer|number)$/.test(kid.st);
         const attach = () => { if (getAt(M, vp) !== o) setAt(M, vp, o); };
         Object.keys(o).forEach(k => {
-          const kin = el('input', { class: 'sin k', value: k, 'aria-label': '키', spellcheck: 'false' }), vin = el('input', { class: 'sin', value: o[k] == null ? '' : String(o[k]), 'aria-label': '값', spellcheck: 'false' });
+          const kin = el('input', { class: 'sin k', value: k, 'aria-label': ui('키'), spellcheck: 'false' }), vin = el('input', { class: 'sin', value: o[k] == null ? '' : String(o[k]), 'aria-label': ui('값'), spellcheck: 'false' });
           let curK = k;
           kin.addEventListener('change', () => {   // 다시 그리지 않고 제자리에서 키 이름 변경(순서 유지) → 포커스 유지
             const nk = kin.value; if (nk === curK || !nk || DANGEROUS.has(nk) || hasOwn(o, nk)) { kin.value = curK; return; }
@@ -1044,11 +1360,11 @@
             curK = nk; refreshOut();
           });
           vin.addEventListener('input', () => { attach(); o[curK] = num ? (vin.value === '' ? null : Number(vin.value)) : vin.value; refreshOut(); });
-          body.appendChild(el('div', { class: 'kv' }, [kin, vin, el('button', { class: 'rx', type: 'button', text: '×', 'aria-label': '삭제', onclick: () => { attach(); delete o[curK]; renderForm(); refreshOut(); } })]));
+          body.appendChild(el('div', { class: 'kv' }, [kin, vin, el('button', { class: 'rx', type: 'button', text: '×', 'aria-label': ui('삭제'), onclick: () => { attach(); delete o[curK]; renderForm(); refreshOut(); } })]));
         });
-        body.appendChild(el('button', { class: 'btn ghost', type: 'button', text: '＋ 키 추가', onclick: () => { attach(); let n = 'key', i = 1; while (hasOwn(o, n)) n = 'key' + (++i); o[n] = num ? 0 : ''; renderForm(); refreshOut(); focusLast(vp); } }));
+        body.appendChild(el('button', { class: 'btn ghost', type: 'button', text: ui('＋ 키 추가'), onclick: () => { attach(); let n = 'key', i = 1; while (hasOwn(o, n)) n = 'key' + (++i); o[n] = num ? 0 : ''; renderForm(); refreshOut(); focusLast(vp); } }));
       } else {
-        const ta = el('textarea', { class: 'sin', rows: 3, spellcheck: 'false', 'aria-label': kid.name, placeholder: '자유 형식 JSON 또는 YAML' }); ta.value = (isObj(v) && !Object.keys(v).length) ? '' : (typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+        const ta = el('textarea', { class: 'sin', rows: 3, spellcheck: 'false', 'aria-label': kid.name, placeholder: ui('자유 형식 JSON 또는 YAML') }); ta.value = (isObj(v) && !Object.keys(v).length) ? '' : (typeof v === 'string' ? v : JSON.stringify(v, null, 2));
         ta.addEventListener('change', () => {   // 값 하나로 해석(배열 [1,2] / [] 도 그대로)
           const w = []; let pv;
           try { pv = parseValue(ta.value, w); } catch (e) { ta.classList.add('bad'); ta.setAttribute('aria-invalid', 'true'); ta.title = e.message; return; }
@@ -1081,59 +1397,98 @@
     function toggleImport() { const i = $('#imp'); i.hidden = !i.hidden; }
     async function doImport() {
       if (busy) return;
-      const it = item(), d = docOf(it.id), err = $('#imperr'); err.textContent = '';
+      const err = $('#imperr'), report = $('#import-report');
+      err.textContent = ''; report.replaceChildren();
       try {
-        const wl = [], docs = yamlParse($('#imptxt').value, wl).filter(isObj); if (!docs.length) throw new Error('가져올 내용이 없습니다');
-        const warnOut = () => { const le = $('#loaderr'); if (wl.length) { le.hidden = false; le.style.color = 'var(--warn)'; le.textContent = 'YAML 경고: ' + wl.join(' · '); } else if (le.textContent.startsWith('YAML 경고')) { le.hidden = true; le.textContent = ''; } };   // 폼을 다시 그려도 남도록 폼 바깥에 표시
-        const hit = docs.find(x => x.kind === d.a.kind) || docs[0];
-        if (hit.kind && hit.kind !== d.a.kind) { const o = C.E.docs.find(x => x.a.kind === hit.kind && (!hit.apiVersion || x.gv === hit.apiVersion)); if (o) { setBusy(true, '불러오는 중…'); try { await ensure(o.a.id); } finally { if (!dead) setBusy(false); } if (dead) return; addItem(o.a.id, true); item().M = hit; save(); renderTabs(); renderForm(); renderOut(); warnOut(); return; } throw new Error(`kind가 ${hit.kind} 입니다. 이 버전에서 해당 API를 찾지 못했습니다`); }
-        it.M = hit; save(); renderForm(); renderOut(); warnOut();
-      } catch (e) { if (!dead) err.textContent = 'YAML 오류: ' + e.message; }
+        const docs = manifestDocuments($('#imptxt').value);
+        setBusy(true, ui('스키마를 확인하는 중…'));
+        const ids = docs.map(({ M }) => C.E.docs.find(d => d.a.kind === M?.kind && d.gv === M?.apiVersion)?.a.id);
+        await Promise.all([...new Set(ids.filter(Boolean))].map(ensure));
+        if (dead) return;
+        const imported = [], results = el('ol');
+        docs.forEach(entry => {
+          const { M, warnings } = entry;
+          const { id, issues } = checkDocument(entry, C.E.docs, schemaOf);
+          if (id) imported.push({ id, M, opt: defaultOpt() });
+          const row = el('li', { text: (M?.kind || ui('리소스')) + ' · ' + (M?.metadata?.name || ui('이름 없음')) + ' — ' + (id ? (issues.length ? ui('진단 ') + issues.length + ui('건') : ui('검증 통과')) : ui('가져오기 실패')) });
+          if (issues.length) row.appendChild(el('ul', {}, issues.map(i => el('li', { text: (i.level === 'error' ? ui('오류 ') : ui('경고 ')) + i.path + ' · ' + i.msg }))));
+          warnings.forEach(w => row.appendChild(el('p', { class: 'note', text: w })));
+          results.appendChild(row);
+        });
+        if (imported.length) {
+          const remaining = new Set(store.items);
+          let first;
+          for (const resource of imported) {
+            const identity = draftName(resource);
+            const active = item();
+            const existing = identity && (remaining.has(active) && draftName(active) === identity ? active :
+              [...remaining].find(it => !it.conflict && draftName(it) === identity));
+            if (existing) { existing.M = resource.M; remaining.delete(existing); }
+            else store.items.push(resource);
+            first ||= existing || resource;
+          }
+          store.active = store.items.indexOf(first);
+          save(); renderTabs(); renderForm(); renderOut();
+        }
+        report.append(el('p', { text: ui`문서 ${docs.length}개 중 ${imported.length}개를 편집 탭에 열었습니다.` }), results);
+      } catch (e) { if (!dead) err.textContent = ui('가져오기 오류: ') + e.message; }
+      finally { if (!dead) setBusy(false); }
     }
 
     /* ---- 출력 ---- */
     const manifestOf = it => { const sch = schemaOf(it.id); return ordered(it.M, '', sch); };
     function renderOut() {
       const it = item(), ob = $('#obody'); ob.innerHTML = '';
+      $('#draft-status').textContent = sensitiveDraft(it) ? ui('보호 대상 내용이 있거나 이전 적용 기록을 확인할 수 없어 이 초안은 메모리에만 보관합니다.') : '';
       host.querySelectorAll('#otabs [role="tab"]').forEach(b => { const on = b.dataset.t === tab; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; if (on) ob.setAttribute('aria-labelledby', b.id); });
       if (!it) { $('#cbadge').textContent = ''; return; }
       const d = docOf(it.id), sch = schemaOf(it.id), issues = currentIssues(), errs = issues.filter(i => i.level === 'error').length, warns = issues.length - errs;
       const reqN = issues.filter(i => i.level === 'error' && i.code === 'required').length, onlyReq = errs > 0 && reqN === errs;
-      const badgeTip = onlyReq ? '아직 비어 있는 필수 값이 있습니다. 폼에서 채우거나 "필수 값 예시로 채우기"를 누르세요.' : '스키마 검증 오류입니다. 검증 탭에서 자세히 볼 수 있습니다.';
-      $('#cbadge').innerHTML = errs ? `<span class="bdg bad" title="${esc(badgeTip)}" role="img" aria-label="${esc(errs + '개 ' + badgeTip)}">${errs}</span>` : (warns ? `<span class="bdg warn">${warns}</span>` : '<span class="bdg ok">✓</span>');
+      const badgeTip = onlyReq ? ui('아직 비어 있는 필수 값이 있습니다. 폼에서 채우거나 "필수 값 예시로 채우기"를 누르세요.') : ui('스키마 검증 오류입니다. 검증 탭에서 자세히 볼 수 있습니다.');
+      $('#cbadge').innerHTML = errs ? `<span class="bdg bad" title="${esc(badgeTip)}" role="img" aria-label="${esc(errs + ui('개 ') + badgeTip)}">${errs}</span>` : (warns ? `<span class="bdg warn">${warns}</span>` : '<span class="bdg ok">✓</span>');
       markIssues();
       if (tab === 'yaml') {
-        const all = el('label', { class: 'chk' }, [el('input', { type: 'checkbox', id: 'allres' }), document.createTextNode(' 전체 리소스(---) 보기')]);
+        const all = el('label', { class: 'chk' }, [el('input', { type: 'checkbox', id: 'allres' }), document.createTextNode(ui(' 전체 리소스(---) 보기'))]);
         const txt = store.items.length > 1 && host.__all ? store.items.map(i => yamlDump(manifestOf(i))).join('\n---\n') : yamlDump(manifestOf(it));
-        ob.appendChild(el('div', { class: 'sbar' }, [store.items.length > 1 ? all : null, el('span', { class: 'vbad ' + (errs ? (onlyReq ? 'warn' : 'bad') : 'ok'), title: errs ? badgeTip : '', text: errs ? (onlyReq ? `필수 값 ${errs}개 필요` : `✖ 오류 ${errs}개`) : '✔ 스키마 검증 통과' + (warns ? ` (경고 ${warns})` : '') })]));
-        const pre = el('pre', { class: 'simyaml' }, [el('button', { class: 'copy', text: '복사', onclick: e => { const b = e.target; (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => { b.textContent = '복사됨'; setTimeout(() => b.textContent = '복사', 1200); }).catch(() => {}); } }), el('code', { text: txt })]);
+        ob.appendChild(el('div', { class: 'sbar' }, [store.items.length > 1 ? all : null, el('span', { class: 'vbad ' + (errs ? (onlyReq ? 'warn' : 'bad') : 'ok'), title: errs ? badgeTip : '', text: errs ? (onlyReq ? ui`필수 값 ${errs}개 필요` : ui`✖ 오류 ${errs}개`) : ui('✔ 스키마 검증 통과') + (warns ? ui` (경고 ${warns})` : '') })]));
+        const pre = el('pre', { class: 'simyaml' }, [el('button', { class: 'copy', text: ui('복사'), onclick: e => { const b = e.target; (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => { b.textContent = ui('복사됨'); setTimeout(() => b.textContent = ui('복사'), 1200); }).catch(() => {}); } }), el('code', { text: txt })]);
         ob.appendChild(pre);
         const cb = ob.querySelector('#allres'); if (cb) { cb.checked = !!host.__all; cb.addEventListener('change', () => { host.__all = cb.checked; renderOut(); }); }
-        ob.appendChild(el('p', { class: 'note', text: `적용: oc apply -f ${d.low}.yaml  ·  검증만: oc apply --dry-run=server -f ${d.low}.yaml` }));
+        const displayed = host.__all ? store.items : [it];
+        const canApply = displayed.every(draft => {
+          const ops = endpoints.operations(docOf(draft.id).a);
+          const collection = ops.create?.p;
+          return typeof draft.M.metadata?.name === 'string' && draft.M.metadata.name.trim() &&
+            collection && !collection.includes('{name}') && ops.get?.p === collection + '/{name}' &&
+            ops.patch?.p === ops.get.p;
+        });
+        ob.appendChild(el('p', { class: 'note', text: canApply
+          ? ui`적용: oc apply -f ${d.low}.yaml  ·  검증만: oc apply --dry-run=server -f ${d.low}.yaml`
+          : ui('요청·응답 탭에서 이 리소스가 지원하는 작업과 명령을 확인하세요.') }));
       } else if (tab === 'check') {
-        if (!issues.length) ob.appendChild(el('div', { class: 'empty', html: '<b>문제가 없습니다.</b><p class="hint">필수 값, 타입, 이름 형식, 알 수 없는 필드를 점검했습니다.</p>' }));
+        if (!issues.length) ob.appendChild(el('div', { class: 'empty', html: ui('<b>문제가 없습니다.</b><p class="hint">필수 값, 타입, 이름 형식, 알 수 없는 필드를 점검했습니다.</p>') }));
         else {
           const ul = el('div', { class: 'issues' });
-          [...issues].sort((x, y) => (x.level === 'error' ? 0 : 1) - (y.level === 'error' ? 0 : 1)).forEach(i => ul.appendChild(el('button', { class: 'iss ' + i.level, onclick: () => { const w = host.querySelector(`.sf[data-vp="${CSS.escape(i.path)}"]`); if (w) { const rm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; w.scrollIntoView({ block: 'center', behavior: rm ? 'auto' : 'smooth' }); w.classList.add('flash'); setTimeout(() => w.classList.remove('flash'), 1200); } } }, [el('span', { class: 'lv', text: i.level === 'error' ? '오류' : '경고' }), el('code', { text: i.path || '(루트)' }), el('span', { text: ' ' + i.msg })])));
+          [...issues].sort((x, y) => (x.level === 'error' ? 0 : 1) - (y.level === 'error' ? 0 : 1)).forEach(i => ul.appendChild(el('button', { class: 'iss ' + i.level, onclick: () => { const w = host.querySelector(`.sf[data-vp="${CSS.escape(i.path)}"]`); if (w) { const rm = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; w.scrollIntoView({ block: 'center', behavior: rm ? 'auto' : 'smooth' }); w.classList.add('flash'); setTimeout(() => w.classList.remove('flash'), 1200); } } }, [el('span', { class: 'lv', text: i.level === 'error' ? ui('오류') : ui('경고') }), el('code', { text: i.path || ui('(루트)') }), el('span', { text: ' ' + i.msg })])));
           ob.appendChild(ul);
         }
-        ob.appendChild(el('p', { class: 'note', text: '스펙 문서의 필드 표(필수 여부·타입)를 기준으로 하며, 어드미션 웹훅·기본값 적용·정책 검사는 포함하지 않습니다. “허용 값” 경고는 설명 문장에서 추출한 힌트라 틀릴 수 있습니다.' }));
+        ob.appendChild(el('p', { class: 'note', text: ui('스펙 문서의 필드 표(필수 여부·타입)를 기준으로 하며, 어드미션 웹훅·기본값 적용·정책 검사는 포함하지 않습니다. “허용 값” 경고는 설명 문장에서 추출한 힌트라 틀릴 수 있습니다.') }));
       } else renderReq(ob, it, d, sch, issues);
     }
     function renderReq(ob, it, d, sch, issues) {
       const o = it.opt, ops = opsOf(d).filter(op => op[2]);
-      if (!ops.length) { ob.textContent = '이 버전에서 시뮬레이션할 수 있는 문서 경로가 없습니다.'; return; }
+      if (!ops.length) { ob.textContent = ui('이 버전에서 시뮬레이션할 수 있는 문서 경로가 없습니다.'); return; }
       if (!ops.some(([op]) => op === o.op)) o.op = ops[0][0];
       const sel = (id, label, opts, val) => `<label class="sl"><span>${label}</span><select id="${id}" class="vsel">${opts.map(([v, t]) => `<option value="${v}"${v === val ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
       const ctl = el('div', { class: 'reqctl', html:
-        sel('o-op', '작업', ops, o.op) +
-        sel('o-fv', 'fieldValidation', [['Ignore', 'Ignore (무시)'], ['Warn', 'Warn (경고, 기본)'], ['Strict', 'Strict (오류)']], o.fv) +
-        sel('o-dry', 'dryRun', [['None', '없음 (실제 저장)'], ['All', 'All (검증만)']], o.dry) +
-        sel('o-scn', '시나리오', [['ok', '정상'], ['notfound', '대상 없음(404)'], ['conflict', '이미 존재/충돌(409)'], ['forbidden', '권한 없음(403)'], ['unauth', '인증 실패(401)']], o.scn) +
-        (d.ns ? `<label class="sl"><span>네임스페이스</span><input id="o-ns" class="sin" value="${esc(o.ns || (it.M.metadata && it.M.metadata.namespace) || 'default')}"></label>` : '') +
-        `<label class="sl"><span>이름</span><input id="o-name" class="sin" value="${esc(o.name || (it.M.metadata && it.M.metadata.name) || '')}"></label>` });
+        sel('o-op', ui('작업'), ops, o.op) +
+        sel('o-fv', 'fieldValidation', [['Ignore', ui('Ignore (무시)')], ['Warn', ui('Warn (경고, 기본)')], ['Strict', ui('Strict (오류)')]], o.fv) +
+        sel('o-dry', 'dryRun', [['None', ui('없음 (실제 저장)')], ['All', ui('All (검증만)')]], o.dry) +
+        sel('o-scn', ui('시나리오'), [['ok', ui('정상')], ['notfound', ui('대상 없음(404)')], ['conflict', ui('이미 존재/충돌(409)')], ['forbidden', ui('권한 없음(403)')], ['unauth', ui('인증 실패(401)')]], o.scn) +
+        (d.ns ? ui`<label class="sl"><span>네임스페이스</span><input id="o-ns" class="sin" value="${esc(o.ns || (it.M.metadata && it.M.metadata.namespace) || 'default')}"></label>` : '') +
+        ui`<label class="sl"><span>이름</span><input id="o-name" class="sin" value="${esc(o.name || (it.M.metadata && it.M.metadata.name) || '')}"></label>` });
       ob.appendChild(ctl);
-      if (o.op === 'patch') ob.appendChild(el('div', { class: 'reqctl', html: sel('o-pt', '패치 종류', [['application/merge-patch+json', 'merge-patch (JSON Merge Patch)'], ['application/json-patch+json', 'json-patch'], ['application/strategic-merge-patch+json', 'strategic-merge-patch']], o.ptype) + `<label class="sl" style="flex:1 1 100%"><span>패치 본문(JSON)</span><textarea id="o-pb" class="sin" rows="3" spellcheck="false">${esc(o.pbody)}</textarea></label>` }));
+      if (o.op === 'patch') ob.appendChild(el('div', { class: 'reqctl', html: sel('o-pt', ui('패치 종류'), [['application/merge-patch+json', 'merge-patch (JSON Merge Patch)'], ['application/json-patch+json', 'json-patch'], ['application/strategic-merge-patch+json', 'strategic-merge-patch']], o.ptype) + ui`<label class="sl" style="flex:1 1 100%"><span>패치 본문(JSON)</span><textarea id="o-pb" class="sin" rows="3" spellcheck="false">${esc(o.pbody)}</textarea></label>` }));
       const bind = (id, key, re) => { const e = ob.querySelector('#' + id); if (!e) return; e.addEventListener(e.tagName === 'SELECT' ? 'change' : 'input', () => { o[key] = e.value; save(); if (re) renderOut(); else drawResult(); }); };
       bind('o-op', 'op', true); bind('o-fv', 'fv'); bind('o-dry', 'dry'); bind('o-scn', 'scn'); bind('o-ns', 'ns'); bind('o-name', 'name'); bind('o-pt', 'ptype'); bind('o-pb', 'pbody');
       const res = el('div', { id: 'simres' }); ob.appendChild(res);
@@ -1141,12 +1496,12 @@
         const r = simulate(Object.assign({}, o), it.M, d.a, d, sch, issues, C);
         if (!r.req) { res.textContent = r.note; return; }
         const ok = r.status < 300, cls = ok ? 'ok' : r.status < 500 ? 'warn' : 'bad';
-        const doc = r.documented.length ? `<div class="mq"><b>문서에 정의된 응답</b> ${r.documented.map(x => `<span class="resp${String(x[0]).startsWith(r.status) ? ' hit' : ''}">${esc(x[0])} <code>${esc(x[1])}</code></span>`).join('')}</div>` : '';
-        res.innerHTML = `<h4 class="rh">요청</h4><pre class="simreq"><code>${esc(r.req.method + ' ' + r.req.path + '\n' + r.req.headers.join('\n') + (r.req.body ? '\n\n' + JSON.stringify(r.req.body, null, 2) : ''))}</code></pre>
+        const doc = r.documented.length ? ui`<div class="mq"><b>문서에 정의된 응답</b> ${r.documented.map(x => `<span class="resp${String(x[0]).startsWith(r.status) ? ' hit' : ''}">${esc(x[0])} <code>${esc(x[1])}</code></span>`).join('')}</div>` : '';
+        res.innerHTML = ui`<h4 class="rh">요청</h4><pre class="simreq"><code>${esc(r.req.method + ' ' + r.req.path + '\n' + r.req.headers.join('\n') + (r.req.body ? '\n\n' + JSON.stringify(r.req.body, null, 2) : ''))}</code></pre>
           <h4 class="rh">예상 응답</h4><div class="statusline ${cls}"><b>${r.status}</b> ${esc(({ 200: 'OK', 201: 'Created', 400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 409: 'Conflict', 422: 'Unprocessable Entity' })[r.status] || '')}</div>
           ${r.warnings.length ? `<div class="warnhdr">Warning: ${r.warnings.map(esc).join('; ')}</div>` : ''}${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}
-          <pre class="simreq"><code>${esc(JSON.stringify(r.body, null, 2))}</code></pre>${r.defaults && r.defaults.length ? `<div class="sdefs"><h4 class="rh">서버가 채운 기본값(문서 기준 추정)</h4><ul>${r.defaults.map(x => `<li><code>${esc(x.path)}</code> = <code>${esc(JSON.stringify(x.v))}</code></li>`).join('')}</ul><p class="note">필드 설명 문장("Defaults to …")에서 추정한 값입니다. 실제 apiserver 기본값 처리·어드미션·웹훅·컨트롤러 동작과 다를 수 있습니다.</p></div>` : ''}${doc}
-          <details class="epd"><summary>curl / oc 로 보내기</summary><div class="in"><pre class="simreq"><code>${esc('TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n\n' + curl(r.req) + '\n\n# oc 로는\n' + ocCmd(o, d, r.ns, r.name, r.req.body, r.req.path))}</code></pre></div></details>
+          <pre class="simreq"><code>${esc(JSON.stringify(r.body, null, 2))}</code></pre>${r.defaults && r.defaults.length ? ui`<div class="sdefs"><h4 class="rh">서버가 채운 기본값(문서 기준 추정)</h4><ul>${r.defaults.map(x => `<li><code>${esc(x.path)}</code> = <code>${esc(JSON.stringify(x.v))}</code></li>`).join('')}</ul><p class="note">필드 설명 문장("Defaults to …")에서 추정한 값입니다. 실제 apiserver 기본값 처리·어드미션·웹훅·컨트롤러 동작과 다를 수 있습니다.</p></div>` : ''}${doc}
+          <details class="epd"><summary>curl / oc 로 보내기</summary><div class="in"><pre class="simreq"><code>${esc('TOKEN=$(oc whoami -t)\nAPISERVER=$(oc whoami --show-server)\n\n' + curl(r.req) + ui('\n\n# oc 로는\n') + ocCmd(o, d, r.ns, r.name, r.req.body, r.req.path))}</code></pre></div></details>
           <p class="note">이 응답은 문서의 스키마 규칙으로 계산한 <b>가상 응답</b>입니다. 기본값은 설명 문장에서 추정한 것만 채우며, 실제 클러스터의 어드미션·웹훅·RBAC·충돌 검사는 반영하지 않습니다.</p>`;
       }
       drawResult();
@@ -1165,23 +1520,72 @@
       try { await Promise.all(ids.map(ensure)); }
       catch (e) {
         if (dead) return;
-        const f = $('#sform'); f.innerHTML = '<div class="empty">스키마 데이터를 불러오지 못했습니다: ' + esc((e && e.message) || String(e)) + '<p><button class="btn" id="retry">다시 시도</button></p></div>';
-        f.querySelector('#retry').addEventListener('click', () => { f.innerHTML = '<p class="note">스키마를 불러오는 중…</p>'; start(); });
+        const f = $('#sform'); f.innerHTML = ui('<div class="empty">스키마 데이터를 불러오지 못했습니다: ') + esc((e && e.message) || String(e)) + ui('<p><button class="btn" id="retry">다시 시도</button></p></div>');
+        f.querySelector('#retry').addEventListener('click', () => { f.innerHTML = ui('<p class="note">스키마를 불러오는 중…</p>'); start(); });
         return;
       }
       if (dead) return;
       try {
-        if (apiId) addItem(apiId, true);
+        if (apiId) {
+          const selected = store.items.findIndex(it => it.id === apiId && it.uid === history.state?.draftUid);
+          if (selected >= 0) store.active = selected;
+          else if (item()?.id !== apiId) addItem(apiId, true);
+        }
         if (!store.items.length) addItem(first, true);
         renderTabs(); renderForm(); renderOut();
-      } catch (e) { $('#sform').innerHTML = '<div class="empty">시뮬레이터를 표시하지 못했습니다: ' + esc(e.message) + '</div>'; }
+      } catch (e) { $('#sform').innerHTML = ui('<div class="empty">시뮬레이터를 표시하지 못했습니다: ') + esc(e.message) + '</div>'; }
     }
-    start();
-    return { destroy() { dead = true; } };
+    async function restoreDrafts() {
+      let cleanupNote = '';
+      const clear = $('#clear-drafts'), add = $('#addq');
+      autosave.disabled = clear.disabled = add.disabled = true;
+      try {
+        if (canCoordinate) {
+          let consumed;
+          const saved = await draftTransaction(key, (existing, records, cleared) => {
+            lastClear = cleared;
+            const disk = restoreStore(JSON.stringify(existing), C.docOf);
+            const raw = storageError ? null : localStorage.getItem(key);
+            if (raw === null) return disk;
+            let old;
+            try { old = JSON.parse(raw); } catch { return disk; }
+            if (!Array.isArray(old?.items)) return disk;
+            const legacy = restoreStore(raw, C.docOf);
+            const merged = mergeLegacyDrafts(disk, persistentDrafts(legacy));
+            if (merged.items.length !== disk.items.length) records.put(merged, key);
+            if (legacy.items.length === old.items.length) consumed = raw;
+            return merged;
+          });
+          if (consumed !== undefined) {
+            try { if (localStorage.getItem(key) === consumed) localStorage.removeItem(key); }
+            catch { cleanupNote = ui('초안을 이전했습니다. 이전 저장본 정리는 다음에 다시 시도합니다.'); }
+          }
+          const recovered = restoreStore(JSON.stringify({ items: migratedSecrets.get(key) || [] }), C.docOf);
+          migratedSecrets.delete(key);
+          const memory = store.items.filter(sensitiveDraft).concat(recovered.items);
+          const selected = store.items[store.active];
+          const restored = restoreStore(JSON.stringify(saved), C.docOf);
+          store.items = restored.items.concat(memory);
+          store.active = selected && memory.includes(selected) ? store.items.indexOf(selected) : restored.active;
+          baseline = clone(persistentDrafts(store));
+        }
+      } catch {
+        autoSave = false;
+        storageError = ui('초안 저장소를 열지 못했습니다. 이 화면에서는 메모리로 편집합니다.');
+      }
+      if (dead) return;
+      autosave.disabled = !canCoordinate || !!storageError;
+      autosave.checked = autoSave;
+      clear.disabled = add.disabled = false;
+      if (storageError || cleanupNote) $('#storage-note').textContent = storageError || cleanupNote;
+      start();
+    }
+    restoreDrafts();
+    return { destroy() { dead = true; window.removeEventListener('storage', syncPreference); } };
   }
 
   /* 공개 API: mount, yamlParse, yamlDump, validate, makeSchema, simulate (opsOf 는 보조).
      _t 는 Node 테스트 전용 내부 함수 모음이며 공개 API 가 아니다 — 언제든 바뀌거나 사라질 수 있으니 화면 코드에서 쓰지 말 것. */
-  root.Sim = { mount, yamlParse, yamlDump, validate, makeSchema, simulate, opsOf, _t: { ensureRequired, sampleFill, setAt, getAt, delAt, hasAt, mergePatch, resNames, curl, ocCmd, sq, defaultFor, ordered, restoreStore, closeTab, cleanOpt, normT, jsonPatch, parseValue, nameError, serverObject, defaultFrom, applyDefaults } };
+  root.Sim = { needsName, assessDocuments, upgradeImpact, manifestDocuments, checkDocument, mount, yamlParse, yamlDump, validate, makeSchema, simulate, opsOf, _t: { ensureRequired, sampleFill, setAt, getAt, delAt, hasAt, mergePatch, resNames, curl, ocCmd, sq, defaultFor, ordered, restoreStore, closeTab, cleanOpt, normT, jsonPatch, parseValue, nameError, serverObject, defaultFrom, applyDefaults } };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Sim;
 })(typeof window !== 'undefined' ? window : globalThis);

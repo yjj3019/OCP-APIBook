@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /* 부팅: 아이콘 채우기, 앱 시작, 서비스 워커 등록. */
 (function () {
-  if (!window.MERGED || !window.App?.views?.home || !window.Icon || !window.ApiSearch || !window.ApiEndpoints || !document.getElementById('catalog-hashes')) {
+  if (document.getElementById('startup-reload')) return;
+  const ui = window.ApiBookLocale?.text || (source => source);
+  window.ApiBookLocale?.initializeShell();
+  if (!window.ApiBookLocale || !window.MERGED || !window.App?.views?.home || !window.Icon || !window.ApiSearch || !window.ApiEndpoints || !document.getElementById('catalog-hashes')) {
     const main = document.getElementById('main');
-    main.textContent = '카탈로그를 불러오지 못했습니다. ';
+    main.textContent = ui('카탈로그를 불러오지 못했습니다. ');
     const reload = document.createElement('button');
-    reload.textContent = '페이지 새로고침';
+    reload.textContent = ui('페이지 새로고침');
     reload.addEventListener('click', () => location.reload());
     main.appendChild(reload);
     return;
