@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Refresh the catalog from the versioned sources of the published API books."""
 import html
 import http.client

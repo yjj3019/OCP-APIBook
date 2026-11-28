@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 커맨드 팔레트(Ctrl/⌘+K, /), 단축키, 도움말 */
 (function () {
   'use strict';
@@ -147,7 +147,7 @@
       <p>API 설명·필드·엔드포인트는 Apache License 2.0으로 공개된 버전별 API 문서에서 수집해 변형했습니다. 원문 라이선스 조건에 따라 설명 문장 속 상표 이름은 중립적인 표현으로 바꿨고, API 그룹·종류 이름(예: <code>route.openshift.io</code>)은 상호운용을 위한 식별자라 그대로 둡니다. 출처, 원문 고지, 변경 사항은 NOTICE에 있습니다.</p>
       <p>"제약·제한 사항"은 원문 설명에서 자동 추출한 것이라 정확하지 않을 수 있습니다. 중요한 판단은 원문을 확인하세요. "일반 관계"(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.</p>
       <p>글꼴은 사용자 기기의 시스템 글꼴을 씁니다(웹 글꼴을 포함하지 않음).</p>
-      <p class="note"><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener noreferrer">저장소 · LICENSE · NOTICE ${ic('external', 12)}</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>
+      <p class="note"><a href="LICENSE" target="_blank" rel="noopener">코드 · MIT</a> · <a href="LICENSE-APACHE" target="_blank" rel="noopener">카탈로그 · Apache-2.0</a> · <a href="NOTICE" target="_blank" rel="noopener">출처 및 고지</a> · <a href="https://docs.redhat.com/en/documentation/openshift_container_platform/" target="_blank" rel="noopener noreferrer">원문 문서 ${ic('external', 12)}</a></p>
       <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
       <p style="margin:0 0 8px">즐겨찾기, 최근 본 API, 테마, 기준 버전은 이 브라우저에 저장됩니다. 초안은 시뮬레이터의 ‘모든 버전의 저장본 지우기’에서 삭제할 수 있습니다.</p>
       <button class="btn ghost" id="clrstore">${ic('trash', 14)} 화면 설정과 탐색 기록 지우기</button></div>`;

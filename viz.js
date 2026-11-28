@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 캔버스 그래프 뷰: 힘 기반 배치, 확대/이동/드래그, 선택·강조. 외부 라이브러리 없음. */
 (function (root) {
   const STYLE = {

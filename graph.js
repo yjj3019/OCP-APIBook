@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* API 관계 그래프 데이터. 브라우저(window.ApiGraph)와 Node 양쪽에서 동작 */
 (function (root) {
   const locale = typeof module !== 'undefined' && module.exports ? require('./locale') : root.ApiBookLocale;

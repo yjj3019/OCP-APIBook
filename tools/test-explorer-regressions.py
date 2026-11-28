@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Exercise catalog-backed command examples, browse pagination, and compare history offline."""
 import argparse
 import json

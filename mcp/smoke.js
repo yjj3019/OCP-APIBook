@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* MCP 서버 스모크 테스트: node mcp/smoke.js  (자식 프로세스로 stdio 왕복) */
 const { spawn } = require('child_process'), path = require('path');
 const p = spawn(process.execPath, [path.join(__dirname, 'server.js')], { stdio: ['pipe', 'pipe', 'inherit'] });

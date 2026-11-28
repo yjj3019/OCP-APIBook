@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // Render the overview assemblies from a single documentation revision.
 const fs = require('node:fs');
 const path = require('node:path');

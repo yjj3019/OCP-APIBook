@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // Translate authored UI templates before inserting field values, user input or source documentation.
 (function (root) {
   'use strict';
@@ -96,7 +96,7 @@
     "{0} 색인 {1}단어 · {2}ms": "{0} Index: {1} terms · {2} ms",
     "{0} 단축키 보기 (?)": "{0} Keyboard shortcuts (?)",
     "{0} 정보 · 고지 · 저장 설정": "{0} About, notices and storage",
-    "{0} 저장소 · Apache-2.0": "{0} Repository · Apache-2.0",
+    "{0} 저장소": "{0} Repository",
     "즐겨찾기": "Favorites",
     "최근 본 API": "Recently viewed APIs",
     "네임스페이스": "Namespaced",
@@ -378,7 +378,9 @@
     "일반 관계": "Common relationship",
     "(점선)는 문서가 아니라 일반적인 구조를 정리한 것입니다.": " (dotted) represents a common structural relationship.",
     "글꼴은 사용자 기기의 시스템 글꼴을 씁니다(웹 글꼴을 포함하지 않음).": "This app uses the system fonts installed on your device.",
-    "저장소 · LICENSE · NOTICE {0}": "Repository · LICENSE · NOTICE {0}",
+    "코드 · MIT": "Code · MIT",
+    "카탈로그 · Apache-2.0": "Catalog · Apache-2.0",
+    "출처 및 고지": "Attribution and notices",
     "원문 문서 {0}": "Source documentation {0}",
     "즐겨찾기, 최근 본 API, 테마, 기준 버전은 이 브라우저에 저장됩니다. 초안은 시뮬레이터의 ‘모든 버전의 저장본 지우기’에서 삭제할 수 있습니다.": "This browser stores your favorites, recent APIs, theme and reference release. To delete simulator drafts, use Clear saved drafts for all releases in the simulator.",
     "{0} 화면 설정과 탐색 기록 지우기": "{0} Clear display settings and browsing history",

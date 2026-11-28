@@ -1,6 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 const fs = require('fs'), path = require('path');
-const publicFiles = new Set(['index.html', 'sw.js', 'app.css', 'sim.css', 'ui-kit.js', 'locale.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js', 'LICENSE', 'NOTICE']);
+const legalFiles = new Set(['LICENSE', 'LICENSE-APACHE', 'NOTICE']);
+const publicFiles = new Set(['index.html', 'sw.js', 'app.css', 'sim.css', 'ui-kit.js', 'locale.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js', ...legalFiles]);
 const isDataFile = name => /^(?:merged|legacy|versions|\d+\.\d+(?:\.fidx|\.fields\.[a-z0-9_]+)?)\.js$/.test(name);
 // Embedded by stamp.js so loading the first script does not itself require a file:// SRI request.
 function loadPageAssets() {
@@ -52,12 +53,12 @@ function assembleSite(root, site) {
   const data = fs.readdirSync(path.join(root, 'data')).filter(isDataFile).map(name => path.join('data', name));
   for (const file of [...publicFiles, ...data]) {
     const source = path.join(root, file), target = path.join(site, file);
-    if (/\.(?:html|js|css)$/.test(file)) fs.writeFileSync(target, canonicalBytes(fs.readFileSync(source)));
+    if (legalFiles.has(file) || /\.(?:html|js|css)$/.test(file)) fs.writeFileSync(target, canonicalBytes(fs.readFileSync(source)));
     else fs.copyFileSync(source, target);
   }
   fs.writeFileSync(path.join(site, '.nojekyll'), '');
 }
-module.exports = { publicFiles, isDataFile, canonicalBytes, assembleSite, pageLoader, loaderHash };
+module.exports = { legalFiles, publicFiles, isDataFile, canonicalBytes, assembleSite, pageLoader, loaderHash };
 if (require.main === module) {
   const root = path.join(__dirname, '..');
   assembleSite(root, path.join(root, '_site'));

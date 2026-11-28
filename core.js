@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 앱 코어: 상태·저장소·지연 로딩·통합 검색 엔진·라우터·셸(사이드바/테마/토스트) */
 (function () {
   'use strict';
@@ -318,7 +318,7 @@
       ${fav.length ? ui`<div class="sidehead">즐겨찾기</div><ul class="sidelist">${fav.map(item).join('')}</ul>` : ''}
       ${rec.length ? ui`<div class="sidehead">최근 본 API</div><ul class="sidelist">${rec.map(item).join('')}</ul>` : ''}
       <div class="sidehead">분류</div><ul class="sidelist">${cats.map(([b, n]) => `<li><a class="sideitem" href="${App.href('browse:cat=' + b)}"><span class="k" style="font-family:var(--sans)">${esc(App.categories[b] || b)}</span><span class="n">${n}</span></a></li>`).join('')}</ul>
-      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString(App.locale)}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="#" id="aboutlink">${App.ic('info', 13)} 정보 · 고지 · 저장 설정</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소 · Apache-2.0</a></div>`;
+      <div class="sidefoot"><span>${App.ic('zap', 13)} 색인 ${U.E.stats.tokens.toLocaleString(App.locale)}단어 · ${Math.round(U.E.stats.buildMs)}ms</span><a href="#" id="helplink">${App.ic('keyboard', 13)} 단축키 보기 (?)</a><a href="#" id="aboutlink">${App.ic('info', 13)} 정보 · 고지 · 저장 설정</a><a href="https://github.com/yjj3019/OCP-APIBook" target="_blank" rel="noopener">${App.ic('external', 13)} 저장소</a></div>`;
     markNav(App.cur);
   }
   App.renderSide = renderSide;

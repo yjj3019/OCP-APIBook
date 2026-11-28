@@ -1,9 +1,12 @@
 ---
 name: ocp-api-book
 description: OpenShift(OCP) API의 필수 필드, 정확한 YAML 경로, apiVersion, REST 경로, 릴리스별 제약·차이를 확인한다. Route TLS 같은 단독 스키마 질문과 Operator·클라이언트·YAML·Helm 코드 작성 및 리뷰에서 버전별 공식 근거가 필요할 때 사용한다.
+license: MIT
 ---
 
 # OpenShift API Book
+
+스킬 코드는 [MIT 라이선스](LICENSE)를 따릅니다. 연결된 카탈로그의 OpenShift API 데이터에는 해당 배포본의 Apache-2.0 라이선스와 원문 고지가 적용됩니다.
 
 질문이나 프로젝트에서 OCP 릴리스를 확인하고, 명시된 릴리스를 조회 인자에 그대로 전달한다. 버전을 알 수 없어 기본값을 사용하면 응답의 실제 `version`을 밝힌다. 동명 Kind가 있으면 매니페스트의 API 그룹으로 좁힌다. 그룹을 결정할 단서가 없으면 도구가 반환한 후보를 제시한다.
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 제약 문장 감사 기준선 도구 (재수집·규칙 변경 후 새로 생긴 문장만 사람이 검토하도록)
  * 대상: data/merged.js 의 cons(실제로 화면·MCP 에 나가는 (유형, 문장) 고유 쌍; 상표 치환 후 문장)
  * 기준선: tools/cons-audited.json = [{t, x, ok}] — 검토 완료된 (유형, 문장). ok=false 는 오탐(이면 cons-deny.json/규칙으로 제거해야 함)

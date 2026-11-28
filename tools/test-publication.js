@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -10,7 +10,7 @@ const { createHash } = require('node:crypto');
 const vm = require('node:vm');
 const { withPublication } = require('./publish');
 const { stageStamps } = require('./stamp');
-const { publicFiles, assembleSite } = require('./site-files');
+const { legalFiles, publicFiles, assembleSite } = require('./site-files');
 const repo = path.join(__dirname, '..');
 
 function workspace(t) {
@@ -63,6 +63,11 @@ test('Windows and Git checkouts produce identical deployable bytes', t => {
   assembleSite(root, site);
   const lf = stamp('\n');
   assert.deepEqual(crlf, lf);
+  for (const name of legalFiles) {
+    const body = fs.readFileSync(path.join(site, name), 'utf8');
+    assert.equal(body, fs.readFileSync(path.join(repo, name), 'utf8').replace(/\r\n/g, '\n'));
+    assert.ok(lf[1].includes('"sha256-' + createHash('sha256').update(body).digest('base64') + '"'), name);
+  }
   const hashes = JSON.parse(lf[0].match(/id="catalog-hashes" type="application\/json">([^<]+)/)[1]);
   for (const file of Object.keys(hashes)) {
     const digest = createHash('sha256').update(fs.readFileSync(path.join(site, file))).digest();

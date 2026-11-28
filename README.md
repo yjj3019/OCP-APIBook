@@ -123,11 +123,11 @@ API 문서 현행화는 `npm ci --prefix tools/refresh` 후 `python tools/refres
 
 ## 라이선스와 상표
 
-[Apache License 2.0](LICENSE). 원문 문서가 Apache License 2.0 으로 공개되어 있어 같은 라이선스를 따릅니다.
-수집 데이터는 원문의 파생물이며 출처, 원문 Legal Notice, 변경 사항은 [NOTICE](NOTICE)에 적었습니다. 필드 설명의 상당 부분은 Kubernetes API 레퍼런스(Copyright The Kubernetes Authors, Apache License 2.0)에서 유래합니다.
+- **자체 코드와 문서**는 [MIT License](LICENSE)를 적용합니다. 웹 대시보드, MCP 서버, CLI와 AI 스킬, 빌드·테스트 도구가 포함됩니다.
+- **수록 카탈로그(`data/`)와 원문을 인용하는 제약 검토 데이터(`tools/cons-audited.json`, `tools/cons-deny.json`, `tools/cons-retype.json`)**는 [Apache License 2.0](LICENSE-APACHE)을 따릅니다. OpenShift·Kubernetes 원문 출처, 저작권 고지, 변경 사항을 [NOTICE](NOTICE)에 담았습니다. 이 데이터를 재배포할 때는 Apache-2.0 전문과 필요한 고지를 함께 제공하세요.
 
 비공식 프로젝트이며 원문 문서의 저작자·상표권자와 제휴하거나 그들의 보증을 받지 않았습니다. 제품 이름은 원문 문서의 출처를 밝히기 위해서만 씁니다.
-원문 Legal Notice의 "수정본은 상표를 제거해야 한다"는 조건에 따라, 빌드 때 `tools/trademark.js` 가 사람이 읽는 설명 문장(API·필드 설명, 가이드 제목·본문)의 제품·회사 이름을 "platform", "host operating system", "vendor" 같은 일반 명칭으로 바꿉니다. 화면 UI에도 상표를 쓰지 않으며, 정보 창과 하단은 "Apache-2.0로 공개된 문서"라고만 표시하고 NOTICE를 가리킵니다.
+원문 Legal Notice의 "수정본은 상표를 제거해야 한다"는 조건에 따라, 빌드 때 `tools/trademark.js` 가 사람이 읽는 설명 문장(API·필드 설명, 가이드 제목·본문)의 제품·회사 이름을 "platform", "host operating system", "vendor" 같은 일반 명칭으로 바꿉니다. 화면에서는 프로젝트 코드와 수록 데이터의 라이선스를 각각 안내합니다.
 상호운용을 위해 API 그룹·Kind 이름과 경로(예: `route.openshift.io`), 네임스페이스, 열거형 값(`RHCOS`, `RHEL` 등), 원문 URL 같은 **기술 식별자는 바꾸지 않습니다**(자세한 내용은 NOTICE).
 
 ### 법적 고지에 대한 참고

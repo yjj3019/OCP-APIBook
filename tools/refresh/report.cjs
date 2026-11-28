@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // node tools/test-build.js : data/ 검증
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const D = process.argv[2] || path.join(__dirname, '..', 'data');

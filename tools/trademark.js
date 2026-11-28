@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 원문 라이선스 조건("Modified versions must remove all Red Hat trademarks")에 따라 설명 문장 속 상표 이름을 중립적인 표현으로 바꾼다.
  * - 대상: 사람이 읽는 설명 문장(API 설명, 필드 설명, 가이드 제목·본문 텍스트)만.
  * - 제외: API 그룹·종류·경로·URL 등 식별자. 앞뒤가 영숫자·"."·"/"·"_" 이면 식별자의 일부로 보고 건드리지 않는다

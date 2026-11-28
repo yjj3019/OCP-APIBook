@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 // Match each operation against the documented paths of this resource.
 (function (root) {
   function operations(api) {

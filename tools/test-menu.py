@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 """Open index.html directly and exercise its menu pages in an isolated browser profile.
 
 Requires Python Playwright and a locally installed Chrome or Edge browser.
@@ -92,6 +92,14 @@ def check_startup(browser, origin, lang):
             const timer = setTimeout(() => reject(new Error("Service worker did not claim this page")), 15000);
             worker.addEventListener("controllerchange", () => { clearTimeout(timer); resolve(); }, {once: true});
         })""")
+        page.locator("#aboutlink2").click()
+        for label, url in (
+            ("Code · MIT" if lang == "en" else "코드 · MIT", "LICENSE"),
+            ("Catalog · Apache-2.0" if lang == "en" else "카탈로그 · Apache-2.0", "LICENSE-APACHE"),
+            ("Attribution and notices" if lang == "en" else "출처 및 고지", "NOTICE"),
+        ):
+            expect(page.locator("#help").get_by_role("link", name=label, exact=True)).to_have_attribute("href", url)
+        page.locator("#helpx").click()
         page.locator("#home-query").fill("Route")
         page.locator("#home-query").press("Enter")
         page.locator('#bl a[href$="/api:route-route-openshift-io-v1"]').click()
@@ -106,6 +114,16 @@ def check_startup(browser, origin, lang):
             expect(page.locator("main h1")).to_have_text("Route")
             expect(page.locator("#fq")).to_be_visible()
             expect(page.locator("#ver")).to_have_value("4.22")
+        for file, content in (
+            ("LICENSE", "MIT License"),
+            ("LICENSE-APACHE", "Apache License"),
+            ("NOTICE", "Third-party content"),
+        ):
+            legal = ctx.new_page()
+            response = legal.goto(origin + "/" + file)
+            assert response.from_service_worker and response.ok, file
+            expect(legal.locator("body")).to_contain_text(content)
+            legal.close()
 
 
 def check_topology_rotation(page):

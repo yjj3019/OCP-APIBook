@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 부팅: 아이콘 채우기, 앱 시작, 서비스 워커 등록. */
 (function () {
   if (document.getElementById('startup-reload')) return;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT
 /* 배포 스탬프: 정적 파일의 내용 해시를 index.html 의 ?v= 토큰과 서비스 워커(sw.js)에 반영한다.
  *   node tools/stamp.js           (데이터를 다시 빌드한 뒤, 또는 코드·CSS·폰트를 고친 뒤 실행)
  * - 앱 JS/CSS와 데이터 URL 및 무결성 값은 각 파일의 SHA-256으로 고정한다.
@@ -11,7 +11,7 @@ function stageStamps(root, data, out) {
 
   const CODE = ['app.css', 'sim.css', 'ui-kit.js', 'locale.js', 'search.js', 'endpoints.js', 'core.js', 'views.js', 'palette.js', 'boot.js', 'graph.js', 'viz.js', 'topo.js', 'sim.js'];
   const LAZY = ['graph.js', 'viz.js', 'topo.js', 'sim.js'];
-  const { isDataFile, pageLoader, loaderHash } = require('./site-files');
+  const { isDataFile, legalFiles, pageLoader, loaderHash } = require('./site-files');
   const hashes = {};
   const digest = file => crypto.createHash('sha256').update(text(file)).digest('base64');
   for (const file of CODE) hashes[file] = digest(path.join(root, file));
@@ -32,12 +32,14 @@ function stageStamps(root, data, out) {
 
   // 사전 캐시 목록: index.html 이 참조하는 같은 출처 자원 + 지연 로딩 코드 + 기본 버전 핵심 데이터
   const refs = [...html.matchAll(/(?:href|src)="([^"#]+)"/g)].map(m => m[1]).filter(u => Object.hasOwn(hashes, u.split('?')[0]));
-  const pre = [...new Set(['./'].concat(refs, LAZY.map(assetUrl), [assetUrl('data/versions.js'), assetUrl(`data/${latest}.js`), assetUrl(`data/${latest}.fidx.js`)]))];
+  const pre = [...new Set(['./', ...legalFiles].concat(refs, LAZY.map(assetUrl), [assetUrl('data/versions.js'), assetUrl(`data/${latest}.js`), assetUrl(`data/${latest}.fidx.js`)]))];
   const integrity = Object.fromEntries(Object.keys(hashes).map(file => [assetUrl(file), 'sha256-' + hashes[file]]));
   integrity['./'] = 'sha256-' + crypto.createHash('sha256').update(html).digest('base64');
+  for (const file of legalFiles) integrity[file] = 'sha256-' + digest(path.join(root, file));
 
-  const sw = `/* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
-const BUILD = '${build}-${sha(html)}';
+  const sw = `// SPDX-License-Identifier: MIT
+/* 자동 생성 파일(tools/stamp.js) — 직접 고치지 마세요. 재방문 속도와 오프라인 동작을 위한 서비스 워커. */
+const BUILD = '${build}-${sha(JSON.stringify(integrity))}';
 const PREFIX = 'api-book:' + encodeURIComponent(self.registration.scope) + ':';
 const CACHE = PREFIX + BUILD;
 const PRECACHE = ${JSON.stringify(pre, null, 2)};
@@ -59,12 +61,13 @@ self.addEventListener('fetch', e => {
   const r = e.request; if (r.method !== 'GET') return;
   const scope = self.registration.scope;
   if (!r.url.startsWith(scope)) return;
+  const key = r.url.slice(scope.length);
   if (r.mode === 'navigate') {
+    const fallback = ${JSON.stringify([...legalFiles])}.includes(key) ? r : scope;
     // Keep the offline HTML paired with the assets of this successfully installed worker.
-    e.respondWith(fetch(r).catch(() => caches.match(self.registration.scope, { cacheName: CACHE }).then(h => h || Response.error())));
+    e.respondWith(fetch(r).catch(() => caches.match(fallback, { cacheName: CACHE }).then(h => h || Response.error())));
     return;
   }
-  const key = r.url.slice(scope.length);
   if (!Object.hasOwn(INTEGRITY, key)) return;
   e.respondWith((async () => {
     const hit = await caches.match(r, { cacheName: CACHE }).catch(() => undefined);
